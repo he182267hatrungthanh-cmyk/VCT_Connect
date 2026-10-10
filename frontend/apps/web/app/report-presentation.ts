@@ -58,3 +58,10 @@ export function reportFindingTitle(finding: ReportFinding): string {
     ?? REPORT_DIMENSION_LABELS[finding.dimension ?? ""]
     ?? finding.finding_type.replaceAll("_", " ");
 }
+
+export function reportSourceContent(payload: Record<string, unknown>): string | null {
+  if (typeof payload.text === "string" && payload.text.trim()) return payload.text;
+  const value = payload.value;
+  if (value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length)) return null;
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}

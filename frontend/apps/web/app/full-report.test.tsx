@@ -124,7 +124,7 @@ function reportFixture(label: ReportV1["risk"]["label"] = "MODERATE"): ReportV1 
         evidence_id: "supplier:years_active",
         source_kind: "SUPPLIER_DATA",
         source_field: "years_active",
-        payload: { field: "years_active" },
+        payload: { field: "years_active", value: 5 },
       },
     ],
     missing_data: {
@@ -169,8 +169,40 @@ test("full report renders real score, identity, review, actions and evidence tra
   assert.match(html, /href="#evidence-review-0"/);
   assert.match(html, /id="evidence-review-0"/);
   assert.match(html, /review:0/);
+  assert.match(html, /Poor stitching quality/);
+  assert.match(html, /Nội dung nguồn:/);
+  assert.match(html, /<pre[^>]*>5<\/pre>/);
   assert.match(html, /Độ mới:/);
   assert.match(html, /Mở trang nguồn 1688/);
+});
+
+test("absent supplier source values stay explicitly unknown", () => {
+  const report = reportFixture();
+  report.evidence[1].payload.value = null;
+  const html = renderToStaticMarkup(<FullReport report={report} />);
+  assert.match(html, /<pre[^>]*>Chưa xác định<\/pre>/);
+});
+
+test("review source cards preserve safe review URLs and reject unsafe URLs", () => {
+  const report = reportFixture();
+  const reviewUrl = "https://item.taobao.com/item.htm?id=1076425861755";
+  report.evidence[0].payload.source_url = reviewUrl;
+  let html = renderToStaticMarkup(<FullReport report={report} />);
+  assert.match(html, /Mở nguồn đánh giá/);
+  assert.ok(html.includes(`href="${reviewUrl.replaceAll("&", "&amp;")}"`));
+  report.evidence[0].payload.source_url = "https://127.0.0.1/private";
+  html = renderToStaticMarkup(<FullReport report={report} />);
+  assert.doesNotMatch(html, /Mở nguồn đánh giá|href="https:\/\/127\.0\.0\.1/);
+});
+
+test("saved HTML processing time is displayed separately from unknown original capture age", () => {
+  const report = reportFixture();
+  report.extracted_at = new Date().toISOString();
+  const html = renderToStaticMarkup(<FullReport report={report} extractionMethod="USER_UPLOAD" />);
+  assert.match(html, /Tuổi ảnh chụp trang đã lưu chưa xác định/);
+  assert.match(html, /Thời điểm xử lý HTML/);
+  assert.match(html, /Tuổi ảnh chụp trang: Chưa xác định/);
+  assert.doesNotMatch(html, /<small>Thu thập|Độ mới:/);
 });
 
 test("insufficient information is visibly distinct from low risk", () => {

@@ -19,7 +19,7 @@ export type AnalysisStatusEvent = {
 };
 export type SubmitAnalysisRequest = { source_url: string };
 export type SubmitAnalysisResponse = { id: string; status: "QUEUED" };
-export type ImportSavedPageResponse = { id: string; status: "COMPLETED" };
+export type ImportSavedPageResponse = { id: string; status: "ASSESSING" | "COMPLETED"; extraction_status: ExtractionStatus };
 export type SubmitGuestAnalysisRequest = SubmitAnalysisRequest;
 export type SubmitGuestAnalysisResponse = SubmitAnalysisResponse;
 export type AnalysisMode = "GUEST_PUBLIC" | "ACCOUNT_PUBLIC" | "EXTENSION_ENHANCED";

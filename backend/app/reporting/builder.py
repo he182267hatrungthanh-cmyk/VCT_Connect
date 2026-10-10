@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from ..extraction.contracts import EVIDENCE_FIELDS
 from .contracts import ReportEvidence, ReportFinding, ReportPayload, ReportRisk
 
 
@@ -118,6 +119,10 @@ def _limitations(
         result.append(
             "Một số trường dữ liệu nguồn không khả dụng và được giữ là chưa biết thay vì giả định an toàn."
         )
+    if _as_dict(snapshot.get("normalized_data")).get("extraction_method") == "USER_UPLOAD":
+        result.append(
+            "Tuổi ảnh chụp trang đã lưu chưa xác định; thời điểm xử lý HTML là lúc nhập trang và không xác nhận thời điểm trang được lưu."
+        )
     if _as_list(identity.get("uncertainty_reasons")):
         result.append(
             "Nhận định nhà máy/thương mại còn có yếu tố chưa chắc chắn; cần xác minh bằng tài liệu độc lập."
@@ -186,6 +191,11 @@ def build_report(
     evidence_by_id: dict[str, ReportEvidence] = {}
     for row in evidence:
         evidence_id = str(row["evidence_id"])
+        payload = _as_dict(row.get("payload"))
+        source_field = row.get("source_field")
+        if row.get("source_kind") == "SUPPLIER_DATA" and source_field in EVIDENCE_FIELDS:
+            # Only canonical source fields from the immutable snapshot are exposed.
+            payload["value"] = normalized.get(source_field)
         evidence_by_id[evidence_id] = ReportEvidence(
             evidence_id=evidence_id,
             source_kind=str(row["source_kind"]),
@@ -194,20 +204,20 @@ def build_report(
                 if row.get("source_field") is not None
                 else None
             ),
-            payload=_as_dict(row.get("payload")),
+            payload=payload,
         )
     for ordinal, review in enumerate(raw_reviews):
-        evidence_id = f"review:{ordinal}"
-        evidence_by_id.setdefault(
-            evidence_id,
-            ReportEvidence(
-                evidence_id=evidence_id,
-                source_kind="REVIEW",
-                source_field="reviews",
-                payload=_as_dict(review.get("payload") if isinstance(review, Mapping) else {}),
-            ),
+        evidence_id = f"review:{review.get('ordinal', ordinal)}"
+        existing = evidence_by_id.get(evidence_id)
+        evidence_by_id[evidence_id] = ReportEvidence(
+            evidence_id=evidence_id,
+            source_kind="REVIEW",
+            source_field="reviews",
+            payload={
+                **(existing.payload if existing else {}),
+                **_as_dict(review.get("payload")),
+            },
         )
-
     key_risks = [item for item in report_findings if _material_risk(item)]
     positives = [
         item for item in report_findings if item.finding_type in _POSITIVE_TYPES

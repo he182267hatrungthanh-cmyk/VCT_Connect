@@ -294,12 +294,17 @@ def create_app(
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
                 window_seconds=settings.admission_window_seconds,
+                azure=settings.queue_transport == "azure",
             )
         except AdmissionDenied as exc:
             raise HTTPException(status_code=429, detail="Submission limit reached") from exc
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
-        return {"id": analysis_id, "status": "COMPLETED"}
+        return {
+            "id": analysis_id,
+            "status": "ASSESSING" if payload["extraction_status"] in {"SUCCESS", "PARTIAL"} else "COMPLETED",
+            "extraction_status": payload["extraction_status"],
+        }
 
     @app.post("/api/v1/analyses/capture", status_code=201)
     async def capture_browser_evidence(

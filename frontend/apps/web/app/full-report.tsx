@@ -12,6 +12,7 @@ import {
   reportPayloadText,
   reportPercent,
   reportRiskLabel,
+  reportSourceContent,
 } from "./report-presentation";
 
 function FindingCard({ finding, availableEvidenceIds }: { finding: ReportFinding; availableEvidenceIds: Set<string> }) {
@@ -34,17 +35,22 @@ function FindingCard({ finding, availableEvidenceIds }: { finding: ReportFinding
   </article>;
 }
 
-function EvidenceCard({ evidence, extractedAt }: { evidence: ReportEvidence; extractedAt: string }) {
+function EvidenceCard({ evidence, extractedAt, uploaded }: { evidence: ReportEvidence; extractedAt: string; uploaded: boolean }) {
   const text = reportPayloadText(evidence.payload);
+  const content = reportSourceContent(evidence.payload);
+  const hasSourceContent = evidence.source_kind === "REVIEW" || evidence.source_kind === "SUPPLIER_DATA";
   const freshness = reportFreshness(extractedAt);
+  const reviewSource = safeSourceUrl(typeof evidence.payload.source_url === "string" ? evidence.payload.source_url : undefined);
   return <article className="report-source" id={reportEvidenceAnchor(evidence.evidence_id)}>
     <div className="report-source-head">
       <code>{evidence.evidence_id}</code>
       <span>{REPORT_SOURCE_KIND_LABELS[evidence.source_kind] ?? evidence.source_kind}</span>
     </div>
     {evidence.source_field && <p><strong>Trường nguồn:</strong> {evidence.source_field}</p>}
-    {text && <p>{text}</p>}
-    <small>Độ mới: {freshness.stale ? "DỮ LIỆU CŨ · " : ""}{freshness.label}</small>
+    {hasSourceContent && <div><strong>Nội dung nguồn:</strong><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{content ?? "Chưa xác định"}</pre></div>}
+    {text && <p><strong>Diễn giải / ghi chú:</strong> {text}</p>}
+    {reviewSource && <a href={reviewSource} target="_blank" rel="noreferrer">Mở nguồn đánh giá ↗</a>}
+    <small>{uploaded ? "Thời điểm xử lý HTML: " : "Độ mới: "}{!uploaded && freshness.stale ? "DỮ LIỆU CŨ · " : ""}{freshness.label}{uploaded ? " · Tuổi ảnh chụp trang: Chưa xác định" : ""}</small>
   </article>;
 }
 
@@ -56,7 +62,8 @@ function MissingList({ title, values }: { title: string; values: string[] }) {
   </div>;
 }
 
-export function FullReport({ report }: { report: ReportV1 }) {
+export function FullReport({ report, extractionMethod }: { report: ReportV1; extractionMethod?: string }) {
+  const uploaded = extractionMethod === "USER_UPLOAD";
   const label = reportRiskLabel(report.risk.label);
   const source = safeSourceUrl(report.source_url);
   const factory = report.factory_trader;
@@ -84,11 +91,12 @@ export function FullReport({ report }: { report: ReportV1 }) {
       <div className="report-ref">
         <small>MÃ PHÂN TÍCH</small>
         <code>{report.analysis_id.slice(0, 8).toUpperCase()}</code>
-        <small>Thu thập {sourceFreshness.label}</small>
+        <small>{uploaded ? "Xử lý HTML" : "Thu thập"} {sourceFreshness.label}</small>
       </div>
     </header>
 
-    {sourceFreshness.stale && <div className="report-stale-warning" role="status">
+    {uploaded && <div className="report-stale-warning" role="status"><strong>Tuổi ảnh chụp trang đã lưu chưa xác định</strong><p>Thời điểm xử lý HTML là lúc nhập trang, không xác nhận thời điểm trang được lưu. Hãy xác minh lại dữ liệu nguồn trước khi đặt hàng.</p></div>}
+    {!uploaded && sourceFreshness.stale && <div className="report-stale-warning" role="status">
       <strong>Dữ liệu nguồn đã cũ</strong>
       <p>Ảnh chụp bằng chứng đã hơn 30 ngày{sourceFreshness.ageDays !== null ? ` (${sourceFreshness.ageDays} ngày)` : ""}. Hãy xác minh lại các thông tin có thể thay đổi trước khi đặt hàng.</p>
     </div>}
@@ -226,9 +234,9 @@ export function FullReport({ report }: { report: ReportV1 }) {
         <div><span className="card-label">NGUỒN VÀ BẰNG CHỨNG</span><h3>Truy vết phát hiện</h3></div>
         <span>{report.evidence.length} mục</span>
       </div>
-      <p className="report-source-freshness">Ảnh chụp dữ liệu dùng cho báo cáo: {sourceFreshness.label}{sourceFreshness.stale ? " · DỮ LIỆU CŨ" : ""}.</p>
+      <p className="report-source-freshness">{uploaded ? "Thời điểm xử lý HTML dùng cho báo cáo" : "Ảnh chụp dữ liệu dùng cho báo cáo"}: {sourceFreshness.label}{!uploaded && sourceFreshness.stale ? " · DỮ LIỆU CŨ" : ""}.</p>
       <div className="report-source-list">
-        {report.evidence.map(item => <EvidenceCard evidence={item} extractedAt={report.extracted_at} key={item.evidence_id} />)}
+        {report.evidence.map(item => <EvidenceCard evidence={item} extractedAt={report.extracted_at} uploaded={uploaded} key={item.evidence_id} />)}
       </div>
       {source && <a className="report-origin-link" href={source} target="_blank" rel="noreferrer">Mở trang nguồn {report.platform} ↗</a>}
     </section>

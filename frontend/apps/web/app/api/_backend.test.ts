@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { OPTIONS as reportOptions } from "./v1/analyses/[analysisId]/report/route";
 import test from "node:test";
 import { proxyBackend } from "./_backend";
 import { OPTIONS as captureOptions } from "./v1/analyses/capture/route";
@@ -108,6 +109,15 @@ test("extension capture proxy caps JSON and allows only its stable origin", asyn
     assert.equal(statusPreflight.status, 204);
     assert.equal(statusPreflight.headers.get("access-control-allow-origin"), origin);
     assert.match(statusPreflight.headers.get("access-control-allow-headers") ?? "", /authorization/);
+    const reportPreflight = await reportOptions(new Request("http://localhost/api/v1/analyses/any-id/report", {
+      method: "OPTIONS", headers: { origin, "access-control-request-headers": "authorization" },
+    }));
+    assert.equal(reportPreflight.status, 204);
+    assert.equal(reportPreflight.headers.get("access-control-allow-origin"), origin);
+    assert.match(reportPreflight.headers.get("access-control-allow-headers") ?? "", /authorization/);
+    assert.equal((await reportOptions(new Request("http://localhost/api/v1/analyses/any-id/report", {
+      method: "OPTIONS", headers: { origin: "https://evil.example" },
+    }))).status, 403);
     const foreign = await captureOptions(new Request(`http://localhost${path}`, {
       method: "OPTIONS", headers: { origin: "https://evil.example" },
     }));
