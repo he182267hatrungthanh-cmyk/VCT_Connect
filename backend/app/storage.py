@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 from .extraction.urls import source_platform, normalize_source_url
 from .extraction.extension_merge import merge_extension_evidence, reject_sensitive_page_state
 from .extraction.renormalize import UnsupportedRawEvidence, renormalize_public_fields
+from .collection_store import CollectionStoreMixin
 
 
 class LeaseLost(RuntimeError):
@@ -24,7 +25,7 @@ class AdmissionDenied(RuntimeError):
     pass
 
 
-class Store:
+class Store(CollectionStoreMixin):
     def __init__(self, database_url: str):
         self.database_url = database_url
 

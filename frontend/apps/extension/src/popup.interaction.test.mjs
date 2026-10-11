@@ -22,6 +22,27 @@ function environment() {
   };
 }
 
+test("reopened popup restores supplier collection progress only for its owner", async () => {
+  const original = globalThis.fetch;
+  environment();
+  globalThis.chrome.storage.local.get = async () => ({ collectionJob: {
+    id, ownerId: record.ownerId, sourceUrl: source, startedAt: Date.now(), stage: "FACTORY",
+  } });
+  globalThis.fetch = async () => { throw new Error("No completed result should be fetched"); };
+  let mounted;
+  try {
+    await act(async () => { mounted = create(React.createElement(App)); });
+    assert.match(text(mounted), /Reading factory profile/);
+    assert.match(text(mounted), /You can close this popup/);
+    globalThis.__mountedAuth = { ...globalThis.__mountedAuth, userId: "owner-two" };
+    await act(async () => mounted.update(React.createElement(App)));
+    assert.doesNotMatch(text(mounted), /Reading factory profile/);
+  } finally {
+    if (mounted) await act(async () => mounted.unmount());
+    globalThis.fetch = original;
+  }
+});
+
 test("mounted popup automatically restores report without Reload and suppresses premature no-report copy", async () => {
   const original = globalThis.fetch;
   environment();

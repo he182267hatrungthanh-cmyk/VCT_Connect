@@ -182,6 +182,19 @@ Follow `frontend/apps/extension/README.md` for Clerk Native API/origin setup and
 
 ## Record acceptance
 
+### One-click 1688 product → shop → factory
+
+1. Reload the updated extension in `chrome://extensions`. Its unpacked directory is `C:\Users\eidel\Desktop\VCT Connect\frontend\apps\extension\build`. Confirm the API, web app, database and continuous worker are running with migration 0017 applied.
+2. In the same signed-in Chrome profile, open `https://detail.1688.com/offer/1027322610455.html`. Open the review drawer and let the visible reviews load before capture. The collector retains loaded reviews; it does not paginate them.
+3. Open VCT Connect's popup and click **Analyze this page** once. Allow the optional 1688 permission to collect linked supplier pages. Expect a web result tab and progress through product, supplier shop and factory profile. Close and reopen the popup during collection; the same analysis ID must remain selected.
+4. After assessment completes, inspect evidence for the product, `shop3e1674729h322.1688.com` and factory member `b2b-222030383828763a1d`. If the profile remains accessible and unchanged, expect founding date `2025.07.14`, employees `11~50人`, annual transactions `50万以下`, custom MOQ `2000件`, private-label MOQ `5000件`, export-order support `不支持`, processing methods and invoice availability. Source identity must match this supplier. Unknown certifications/activity history must remain unknown.
+5. Check the retained review count/text against the cards loaded before clicking. Ten loaded cards were verified in the saved drawer fixture; the live count depends on what Chrome actually rendered. Reopen the report from History and confirm the same evidence and analysis ID.
+6. In a separate run, remove optional 1688 access in extension settings and decline the request. Expect a product-only report with a linked-page limitation and one quota increment. Login/challenge or missing factory navigation must also produce a partial result rather than indefinite collection.
+7. To test interruption, start another collection and close Chrome after the result ID has been reserved, keeping the server worker running. After the 60-second collection deadline, reopen that same result. Expect assessment of the stored product and explicit linked-page timeout limits. Assessment has its own duration; 60 seconds is not a report-completion promise.
+8. Switch VCT accounts and reopen the popup. The prior account's collection/result must not appear. If a submission response was lost, use **Reload last result** or retry the same collection; confirm no second quota reservation.
+
+Automated checks cover saved-DOM extraction, mocked Chrome navigation, popup restoration, PostgreSQL ownership/idempotency and deadline recovery. Real Chrome/Clerk permission and session acceptance must be recorded by the operator; fixture checks do not establish a live-source pass. Photos/video and review pagination remain outside this milestone.
+
 Record the app revision, environment, account label (no credentials), analysis ID, source/evidence origin, observed outcome, duration, screenshot and pass/fail for each test. Mark a blocked prerequisite **not tested**, rather than passed.
 
 A buyer-ready local pass requires the saved-evidence report, source inspection, history refresh, Watchlist deduplication/removal and cross-account isolation. A deployed release additionally needs this journey on the deployed web app with live Clerk/YEScale/Service Bus, persisted report and cost/provenance, plus real Chrome extension acceptance. The guest tracer smoke alone does not meet that gate.

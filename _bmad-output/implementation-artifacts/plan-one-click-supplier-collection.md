@@ -1,0 +1,15 @@
+# One-click linked supplier collection
+
+User approved the milestone and explicitly waived the BMAD renderer halt after its PyPI/Jinja network failure. No workflow source was executed directly.
+
+Acceptance: durable extension background job; one customer-owned analysis/quota reservation; product and loaded reviews, linked shop and factory profile; allowlisted browser navigation without bypassing access controls; three pages and 60-second collection deadline; selected source fields only; identity validation; immutable combined snapshot; one assessment pipeline; partial completion after denied access, timeout or interrupted collection. Popup reopening restores owner-scoped progress. No photos/video or review pagination in this milestone.
+
+Implementation plan: strict selected-evidence bundle normalizer; transactional begin/finalize endpoints and deadline fallback; background service worker with fresh Clerk authentication and optional browser permission; popup start/restore/status; saved-DOM and mocked Chrome lifecycle tests, PostgreSQL ownership/idempotency/fallback tests, full checks/build, independent review and operator acceptance instructions. Agent testing must use saved fixtures, not access the browser-blocked shop through another mechanism.
+
+Status: implemented and locally verified. Real Chrome permission and session acceptance remain explicitly pending until tested by the operator.
+
+Implementation: extension service worker and optional 1688 access; scoped DOM navigation through product/shop/factory; owner-scoped PostgreSQL begin/finalize and deadline fallback; bounded authenticated web proxy; report provenance/partial-page limits; popup restoration. Migration 0017 applied locally. API, web and continuous worker restarted. Extension build version 0.2.0 is ready for reload.
+
+Verification: full backend run produced 1,052 passes, 32 skips and three stale migration-list failures; after updating those expectations, all 22 migration checks passed. Final supplier bundle/collection checks passed 16 tests, including null-text API rejection, quota/idempotency, ownership, deadline fallback, combined report and unchanged review retention. All 143 frontend tests passed. Frontend lifecycle checks cover lost committed responses, navigation between injections, ordinary/JavaScript factory navigation, denied permission, popup closure/restoration and owner changes. TypeScript and web/extension production builds passed. Browser harness using sanitized operator-saved supplier regions passed seven checks and retained all eight profile claims; no live shop access was attempted. Deployed local proxy returned OPTIONS 204 and unauthenticated POST 401.
+
+Independent follow-up review found three issues (inter-injection navigation, ambiguous begin response/quota replay, JSONB null text); all were remedied with regression tests. Re-review found no remaining actionable findings. Screenshot proof: `tmp/linked-capture-proof.png`. Buyer acceptance steps: `END_USER_TEST.md`, one-click 1688 subsection.

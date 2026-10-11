@@ -7,6 +7,7 @@ import { assertPermittedEvidence, captureSelectedDom, supportedOffer } from "./c
 import { loadScopedResult, restoreLastCapture, saveOpenAndLoadResult, type LastCapture } from "./capture-result";
 import { canSubmitEnhancedEvidence, classifyExtensionPage, extensionGate, type ExtensionPageState } from "./extension-shell";
 import { extensionVerdict } from "./extension-verdict";
+import { restoreCollectionJob, type CollectionJob } from "./linked-capture";
 
 const LAST_CAPTURE_KEY = "lastCapture";
 
@@ -24,6 +25,7 @@ export function App() {
   const [lastCapture, setLastCapture] = useState<LastCapture | null>(null);
   const [page, setPage] = useState<ExtensionPageState>({ status: "checking" });
   const [signInDelayed, setSignInDelayed] = useState(false);
+  const [collectionJob, setCollectionJob] = useState<CollectionJob | null>(null);
   const owner = useRef(userId);
   owner.current = isLoaded && isSignedIn ? userId : null;
   const requestVersion = useRef(0);
@@ -47,6 +49,7 @@ export function App() {
   useEffect(() => {
     const restorationVersion = ++requestVersion.current;
     setBusy(false);
+    setCollectionJob(null);
     setLastCapture(null);
     setResult(null);
     setReport(null);
@@ -54,7 +57,8 @@ export function App() {
     setError("");
     if (!isLoaded || !isSignedIn || !userId) { setLastCapture(null); return; }
     let active = true;
-    void chrome.storage.local.get(LAST_CAPTURE_KEY).then(stored => {
+    void chrome.storage.local.get([LAST_CAPTURE_KEY, "collectionJob"]).then(stored => {
+      if (active) setCollectionJob(restoreCollectionJob(stored.collectionJob, userId));
       const last = restoreLastCapture(stored[LAST_CAPTURE_KEY], userId);
       if (active && requestVersion.current === restorationVersion && last) {
         setLastCapture(last);
@@ -65,6 +69,26 @@ export function App() {
     }).catch(() => { if (active) setError("Could not restore the last result link"); });
     return () => { active = false; requestVersion.current++; };
   }, [isLoaded, isSignedIn, userId]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+    let active = true;
+    let pending = false;
+    const timer = setInterval(() => {
+      if (pending) return;
+      pending = true;
+      void chrome.storage.local.get([LAST_CAPTURE_KEY, "collectionJob"]).then(stored => {
+        if (!active || owner.current !== userId) return;
+        setCollectionJob(restoreCollectionJob(stored.collectionJob, userId));
+        const last = restoreLastCapture(stored[LAST_CAPTURE_KEY], userId);
+        if (last && last.analysisId !== lastCapture?.analysisId) {
+          setLastCapture(last);
+          void loadResult(last.analysisId).catch(() => {});
+        }
+      }).catch(() => {}).finally(() => { pending = false; });
+    }, 1000);
+    return () => { active = false; clearInterval(timer); };
+  }, [isLoaded, isSignedIn, userId, lastCapture?.analysisId]);
 
   async function loadResult(analysisId: string) {
     const expectedOwner = owner.current;
@@ -104,6 +128,8 @@ export function App() {
 
   const gate = extensionGate({ authLoaded: isLoaded, signedIn: Boolean(isSignedIn), page });
   const verdict = extensionVerdict(result, report);
+  const collecting = collectionJob && ["STARTING", "SHOP", "FACTORY"].includes(collectionJob.stage)
+    && Date.now() - collectionJob.startedAt < 70_000;
 
   async function capture() {
     const expectedOwner = owner.current;
@@ -112,6 +138,22 @@ export function App() {
     setBusy(true); setError(""); setResult(null); setReport(null);
     try {
       if (!canSubmitEnhancedEvidence(gate)) throw new Error("Sign in on a supported source page before analyzing");
+      // Request optional source access in the button's user gesture. Declining
+      // it keeps the product-only collection path available.
+      if (page.status === "supported" && page.kind === "1688") {
+        await chrome.permissions.request({ origins: ["https://*.1688.com/*"] }).catch(() => false);
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!current()) return;
+        if (!tab?.id || supportedOffer(tab.url || "")?.sourceUrl !== page.sourceUrl) throw new Error("The active product changed; try again");
+        const reply = await chrome.runtime.sendMessage({ type: "START_COLLECTION", tabId: tab.id,
+          ownerId: userId, sourceUrl: page.sourceUrl });
+        if (!current()) return;
+        if (!reply?.id) throw new Error(reply?.error || "Could not start collection");
+        const last = { analysisId: reply.id, sourceUrl: page.sourceUrl, ownerId: userId! };
+        setLastCapture(last);
+        await loadResult(reply.id);
+        return;
+      }
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!current()) return;
       const offer = tab?.url ? supportedOffer(tab.url) : null;
@@ -186,9 +228,16 @@ export function App() {
       <UserButton />
       {gate === "checking-page" && <p>Checking whether this page can be analyzed…</p>}
       {gate === "unsupported-page" && <p>Enhanced analysis is disabled on unsupported pages.</p>}
-      {gate === "ready" && <p><button disabled={busy} onClick={() => void capture()}>{busy ? "Working…" : "Analyze this page"}</button></p>}
+      {gate === "ready" && <p><button disabled={busy || Boolean(collecting)} onClick={() => void capture()}>{busy || collecting ? "Working…" : "Analyze this page"}</button></p>}
+      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Collects this product and its linked supplier pages. Optional 1688 access is requested on first use; declining it keeps product-only analysis available.</p>}
     </>}
     {error && <p className="error" role="alert">{error}</p>}
+    {isSignedIn && collectionJob?.ownerId === userId && <div className="status" aria-live="polite">
+      <strong>{collectionJob.stage === "ERROR" ? "Collection interrupted" : collecting ?
+        ({ STARTING: "Reading product", SHOP: "Reading supplier shop", FACTORY: "Reading factory profile" } as Record<string, string>)[collectionJob.stage]
+        : collectionJob.stage === "ASSESSING" ? "Collection finished · assessment continues" : "Collection deadline reached · stored product awaits processing"}</strong>
+      <p>{collectionJob.error || "You can close this popup. Open the web result to follow assessment and reporting."}</p>
+    </div>}
     {isSignedIn && lastCapture?.ownerId === userId && result && <div className="status" aria-live="polite">
       <strong>{verdict.headline}</strong>
       <p>{result.status === "COMPLETED" && reportLoading ? "Loading saved assessment report…" : verdict.detail}</p>

@@ -131,3 +131,23 @@ test("extension capture proxy caps JSON and allows only its stable origin", asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test("linked collection proxy forwards bounded evidence with extension CORS and rejects oversized bundles", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, init) => {
+    calls++;
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-token");
+    assert.equal((await new Response(init?.body).text()).length, 20_000);
+    return Response.json({ id: "collection", status: "PROCESSING" }, { status: 202 });
+  };
+  try {
+    const path = "/api/v1/analyses/collection/begin";
+    const headers = { origin: "chrome-extension://klggcepemjjbphjclpiabgpfgdbgiljj", authorization: "Bearer test-token", "content-type": "application/json" };
+    const accepted = await proxyBackend(new Request(`http://localhost${path}`, { method: "POST", headers, body: "x".repeat(20_000) }), path);
+    assert.equal(accepted.status, 202);
+    assert.equal(accepted.headers.get("access-control-allow-origin"), headers.origin);
+    const rejected = await proxyBackend(new Request(`http://localhost${path}`, { method: "POST", headers, body: "x".repeat(32_769) }), path);
+    assert.equal(rejected.status, 413); assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
+});

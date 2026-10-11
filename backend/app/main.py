@@ -32,6 +32,7 @@ from .extraction.extension_merge import reject_sensitive_page_state
 from .storage import AdmissionDenied, Store
 from .evaluation import list_blind_cases, submit_blind_label
 from .reporting.preview import build_guest_preview
+from .collection_api import register_collection_routes
 
 
 class Submission(BaseModel):
@@ -305,6 +306,8 @@ def create_app(
             "status": "ASSESSING" if payload["extraction_status"] in {"SUCCESS", "PARTIAL"} else "COMPLETED",
             "extraction_status": payload["extraction_status"],
         }
+
+    register_collection_routes(app, store, settings, require_roles(CUSTOMER), AdmissionDenied)
 
     @app.post("/api/v1/analyses/capture", status_code=201)
     async def capture_browser_evidence(

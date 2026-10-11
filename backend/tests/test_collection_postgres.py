@@ -1,0 +1,120 @@
+from hashlib import sha256
+import json
+import os
+from uuid import UUID, uuid4
+import pytest
+from fastapi.testclient import TestClient
+os.environ.setdefault("DEVELOPER_MODE", "true")
+os.environ.setdefault("DATABASE_URL", "postgresql://unused")
+os.environ["QUEUE_TRANSPORT"] = "local"
+from backend.app.auth import VerifiedIdentity
+from backend.app.config import Settings
+from backend.app.main import create_app
+from backend.app.storage import Store
+from backend.app.extraction.supplier_bundle import SupplierBundle, normalize_bundle
+from backend.tests.test_supplier_bundle import selected
+from backend.tests.test_worker_assessment_postgres import cleanup, WorkerProvider
+from backend.worker.main import process_local_once
+from backend.app.intelligence.assessment import build_assessment
+
+
+class Verifier:
+    def verify(self, request):
+        return VerifiedIdentity(request.headers.get("x-test-owner", "collection_" + OWNER))
+
+
+OWNER = uuid4().hex
+
+
+@pytest.fixture
+def client_store():
+    url = os.getenv("VCT_TEST_DATABASE_URL")
+    if not url: pytest.skip("Set VCT_TEST_DATABASE_URL")
+    store = Store(url); store.initialize()
+    settings = Settings(url, "local", None, None, True)
+    return TestClient(create_app(store=store, settings=settings, verifier=Verifier())), store, settings
+
+
+def initial(value):
+    return {k: v for k, v in value.items() if k not in {"shop", "factory", "outcomes"}}
+
+
+@pytest.mark.parametrize("field", ["description", "claim"])
+def test_finish_rejects_non_persistable_factory_text_before_storage(client_store, field):
+    client, _, _ = client_store
+    value = selected()
+    if field == "description": value["factory"]["description"] = "invalid\x00text"
+    else: value["factory"]["claims"][0]["value"] = "invalid\x00text"
+    assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 422
+
+
+def test_collection_reserves_once_finalizes_once_and_reports_combined_sources(client_store):
+    client, store, settings = client_store
+    value = selected(); analysis_id = UUID(value["job_id"])
+    try:
+        for _ in range(2):
+            response = client.post("/api/v1/analyses/collection/begin", json=initial(value))
+            assert response.status_code == 202, response.text
+        assert store.get(analysis_id)["status"] == "PROCESSING"
+        with store.connect() as conn:
+            assert conn.execute("SELECT count(*) AS n FROM local_queue WHERE analysis_id=%s", (analysis_id,)).fetchone()["n"] == 0
+            owner = conn.execute("SELECT user_id FROM analyses WHERE id=%s", (analysis_id,)).fetchone()["user_id"]
+            used = conn.execute("SELECT used FROM admission_counters WHERE scope='CUSTOMER' AND subject=%s", (str(owner),)).fetchone()["used"]
+            assert used == 1
+        assert client.post("/api/v1/analyses/collection/finish", json=value, headers={"x-test-owner": "other_"+OWNER}).status_code == 404
+        for _ in range(2):
+            response = client.post("/api/v1/analyses/collection/finish", json=value)
+            assert response.status_code == 202, response.text
+        with store.connect() as conn:
+            assert conn.execute("SELECT count(*) AS n FROM local_queue WHERE analysis_id=%s", (analysis_id,)).fetchone()["n"] == 1
+            assert conn.execute("SELECT count(*) AS n FROM supplier_snapshots WHERE analysis_id=%s", (analysis_id,)).fetchone()["n"] == 1
+        assert store.get(analysis_id)["supplier_data"]["years_active"] == 1
+        provider = WorkerProvider()
+        assert process_local_once(store, settings, assess=lambda data: build_assessment(data, provider=provider, model="fixture"))
+        assert store.get(analysis_id)["status"] == "COMPLETED"
+        assert provider.chat_calls == 1
+        report = store.get_report_for_user(analysis_id, owner)["payload"]
+        assert any(e["evidence_id"] == "supplier:factory_profile" for e in report["evidence"])
+        assert report["review_summary"]["review_count"] == 10
+        changed = json.loads(json.dumps(value)); changed["factory"]["claims"][0]["value"] = "2024.07.14"
+        assert client.post("/api/v1/analyses/collection/finish", json=changed).status_code == 409
+    finally: cleanup(store, analysis_id)
+
+
+def test_deadline_recovery_keeps_product_without_extra_admission(client_store):
+    client, store, settings = client_store
+    value = selected(); value["job_id"] = str(uuid4()); analysis_id = UUID(value["job_id"])
+    try:
+        assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        with store.connect() as conn:
+            conn.execute("UPDATE extension_collection_jobs SET expires_at=now()-interval '1 second' WHERE analysis_id=%s", (analysis_id,))
+        assert store.finish_expired_collections() == 1
+        assert store.finish_expired_collections() == 0
+        row = store.get(analysis_id)
+        assert row["status"] == "ASSESSING"
+        assert len(row["reviews"]) == 10
+        assert row["supplier_data"]["years_active"] is None
+        assert row["raw_evidence"]["collection_deadline_fallback"] is True
+        # A late completion cannot overwrite the deadline snapshot.
+        assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
+        assert store.get(analysis_id)["supplier_data"]["years_active"] is None
+        provider = WorkerProvider()
+        assert process_local_once(store, settings, assess=lambda data: build_assessment(data, provider=provider, model="fixture"))
+        with store.connect() as conn:
+            owner = conn.execute("SELECT user_id FROM analyses WHERE id=%s", (analysis_id,)).fetchone()["user_id"]
+        report = store.get_report_for_user(analysis_id, owner)["payload"]
+        assert any("TIMEOUT" in line for line in report["limitations_vi"])
+    finally: cleanup(store, analysis_id)
+
+
+def test_collection_rejects_oversize_and_changed_product(client_store):
+    client, store, _ = client_store
+    value = selected(); value["job_id"] = str(uuid4()); analysis_id = UUID(value["job_id"])
+    try:
+        assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        changed = json.loads(json.dumps(value))
+        changed["product"]["source_url"] = "https://detail.1688.com/offer/996518024136.html"
+        changed["product"]["offer_id"] = "996518024136"
+        assert client.post("/api/v1/analyses/collection/finish", json=changed).status_code == 409
+        assert client.post("/api/v1/analyses/collection/finish", content='"'+'x'*32768+'"', headers={"content-type":"application/json"}).status_code == 413
+    finally: cleanup(store, analysis_id)
