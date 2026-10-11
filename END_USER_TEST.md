@@ -8,7 +8,9 @@ After this audit, PostgreSQL, the production web build (port 3000) and API (port
 
 Use PowerShell from `C:\Users\eidel\Desktop\VCT Connect`. Existing dependencies and Clerk configuration are present on this machine. For another machine, follow README setup first.
 
-For scored reports, put a valid `YESCALE_API_KEY` in the ignored root `.env`. Keep it server-only. Restart the worker after changing it. `YESCALE_MODEL` defaults to `gpt-4o-mini`; `YESCALE_EMBEDDING_MODEL` is optional for semantic review analysis. This audit found no local YEScale key, so a full live report cannot be verified until configured.
+For scored reports, put a valid `YESCALE_API_KEY` in the ignored root `.env`. Keep it server-only. Restart the worker after changing it. `YESCALE_MODEL` defaults to `gpt-4o-mini`; `YESCALE_EMBEDDING_MODEL` is optional for semantic review analysis. The operator configured `deepseek-v4.1-flash`; the approved saved 1688 sample completed a real YEScale report on October 11. DeepSeek V4 structured requests now disable thinking, and the supplier prompt requests concise grounded JSON within the existing token limit.
+
+Verified sample: analysis `1591350c-8239-4945-ad1c-f85ecde61f9e`. Reopen it from **Lịch sử** to inspect the existing report without another model call. It displays **Chưa đủ thông tin**, no overall risk score, 48% confidence and 50% coverage. Source references, browser refresh, History and Watchlist save/reopen/deduplication were checked. Watchlist removal, another account, real Chrome capture and fresh public-source/cloud checks remain separate acceptance steps. The bounded sample worker execution has exited; start the continuous worker below for new submissions.
 
 Start PostgreSQL:
 

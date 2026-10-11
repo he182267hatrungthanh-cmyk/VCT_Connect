@@ -57,6 +57,42 @@ for (const view of ["history", "watchlist"]) {
   });
 }
 
+for (const view of ["history", "watchlist"]) {
+  test(`mounted Page refetches a completed analysis when reopening the same ID from ${view}`, async () => {
+    const original = globalThis.fetch;
+    const clock = windowState();
+    clock.state.location.href += `?analysis=${id}`;
+    clock.state.location.search = `?analysis=${id}`;
+    globalThis.window = clock.state;
+    globalThis.__mountedAuth = { isLoaded: true, isSignedIn: true, userId: "owner", getToken };
+    let polls = 0;
+    globalThis.fetch = async url => {
+      if (String(url) === "/api/v1/analyses") return Response.json([{ ...history, status: "COMPLETED" }]);
+      if (String(url) === "/api/v1/watchlist") return Response.json([{ ...history, id: "entry", analysis_id: id, name: "Saved supplier", analysis_status: "COMPLETED" }]);
+      if (String(url).endsWith("/report")) return Response.json({ detail: "Report not found" }, { status: 404 });
+      polls++;
+      return Response.json({ ...base, status: "COMPLETED", result: { source_url: source, extraction_status: "PARTIAL" } });
+    };
+    let mounted;
+    try {
+      await act(async () => { mounted = create(React.createElement(Page)); });
+      assert.equal(polls, 1);
+      const label = view === "history" ? "Lịch sử," : "Watchlist,";
+      await act(async () => mounted.root.findAllByType("button").find(button => button.props["aria-label"]?.startsWith(label)).props.onClick());
+      const open = view === "history"
+        ? mounted.root.findByProps({ className: "button button-ghost history-open-button" })
+        : mounted.root.findAllByType("button").find(button => button.children.some(child => typeof child === "string" && child.includes("Mở phân tích")));
+      await act(async () => open.props.onClick());
+      assert.equal(polls, 2);
+      assert.match(text(mounted), /Chưa có báo cáo đánh giá đầy đủ/);
+      assert.equal(mounted.root.findByProps({ id: "source-url" }).props.value, source);
+    } finally {
+      if (mounted) await act(async () => mounted.unmount());
+      globalThis.fetch = original;
+    }
+  });
+}
+
 test("mounted Page completed extraction-only result does not mark assessment/report done", async () => {
   const original = globalThis.fetch;
   const clock = windowState();

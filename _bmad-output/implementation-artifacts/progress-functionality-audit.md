@@ -42,7 +42,7 @@ Four independent review lenses (blind, edge cases, verification gaps, intent ali
 
 ## Remaining release gates
 
-- Local YEScale key was absent during inspection. Public extraction may complete without a report; queued import/capture assessment needs the worker key and otherwise retries/fails. A valid server-only key and a worker restart are required for live report acceptance.
+- The key was absent during the initial inspection. After operator configuration and explicit approval, the historical 1688 sample passed real YEScale assessment/report acceptance; see the follow-up below. Fresh public-source, Chrome and cloud acceptance remain pending.
 - Historical Azure guest-tracer deployment smoke checks queue plumbing, not assessment, report evidence, history/Watchlist or signed-in acceptance. This audit does not redeploy cloud resources or claim current live parity.
 - Live source challenges are explicit terminal extraction outcomes, not scored-report success. Repeat accessible-source checks across all three platforms; Alibaba has no import/capture recovery path.
 - Browser fallback remains disabled in Azure pending the documented compatible runtime. The standard worker has optional tested media contracts but no production source-media acquisition/retention/deletion path.
@@ -57,3 +57,13 @@ Web/API remain running on ports 3000/8000. The audit worker was stopped after ve
 ## End-user test
 
 Use [END_USER_TEST.md](../../END_USER_TEST.md). The shortest meaningful buyer acceptance is signed-in saved evidence → assessment/report → source inspection → persisted history → Watchlist deduplication/removal → second-account isolation. A synthetic tracer pass alone is not that acceptance.
+
+## Live provider follow-up — October 11, 2026
+
+The operator configured YEScale with `deepseek-v4.1-flash` and explicitly approved sending the saved repository 1688 sample to `https://api.yescale.io`. The initial model used all 1,800 output tokens for reasoning and returned no answer. DeepSeek V4 structured text/media requests now disable thinking, including provider-prefixed model names, with the chosen setting preserved in model provenance. Supplier prompt v2 asks for concise Vietnamese JSON and explicitly lists permissible evidence reference fields. The schema and token limit remain enforced.
+
+Analysis `1591350c-8239-4945-ad1c-f85ecde61f9e` completed through the actual worker assessment/report functions. Earlier attempts included invalid/truncated model output and a transient provider connection failure. The successful model run returned `finish_reason=stop`, 1,074 prompt tokens, 875 completion tokens and 5,182ms provider latency. It persisted `thinking.type=disabled` and `supplier-interpretation.prompt.v2`. The report correctly has no overall risk score, `INSUFFICIENT_INFORMATION`, confidence 0.475 and coverage 0.5; the UI rounds confidence to 48%.
+
+Browser acceptance verified the Vietnamese report, source rating reference and retained source values, unknown saved-page capture age, Watchlist save/reopen/deduplication and report persistence after refresh. History lists the completed report. Reopening the same analysis exposed a frontend polling dependency bug: the open handler cleared state without changing the ID, so a previously stopped poll did not restart. A reopen generation now triggers a fresh lookup for History/Watchlist, with two mounted component regressions.
+
+Follow-up checks: 39 adapter/interpretation tests, 52 assessment/report/scoring tests and seven PostgreSQL worker tests passed; 126 frontend tests and TypeScript checking passed. Quick independent review found no code issues. Watchlist removal, second-account browser isolation, real Chrome extension, fresh live sources and cloud deployment remain separate gates. Only the approved sample was processed; the continuous worker remains stopped so unrelated queued historical analyses are not sent to the provider.

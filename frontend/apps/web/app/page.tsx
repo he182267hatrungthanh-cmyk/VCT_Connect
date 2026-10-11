@@ -440,6 +440,7 @@ export default function Page() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [id, setId] = useState<string | null>(null);
+  const [reopenVersion, setReopenVersion] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [delayed, setDelayed] = useState(false);
@@ -568,7 +569,7 @@ export default function Page() {
     }
     void poll();
     return () => { active = false; window.clearTimeout(timer); window.clearTimeout(delayTimer); };
-  }, [getToken, id, isSignedIn]);
+  }, [getToken, id, isSignedIn, reopenVersion]);
 
   useEffect(() => {
     if (!id || !isSignedIn || analysis?.status !== "COMPLETED" || analysis.id !== id) return;
@@ -672,6 +673,7 @@ export default function Page() {
     window.history.replaceState(null, "", `${next.pathname}${next.search}${next.hash}`);
     setView("analysis");
     setId(item.id);
+    setReopenVersion(version => version + 1);
     setUrl(item.source_url);
     reopenedId.current = null;
     clearSavedPage();
