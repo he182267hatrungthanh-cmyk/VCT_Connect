@@ -229,7 +229,7 @@ export function App() {
       {gate === "checking-page" && <p>Checking whether this page can be analyzed…</p>}
       {gate === "unsupported-page" && <p>Enhanced analysis is disabled on unsupported pages.</p>}
       {gate === "ready" && <p><button disabled={busy || Boolean(collecting)} onClick={() => void capture()}>{busy || collecting ? "Working…" : "Analyze this page"}</button></p>}
-      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Collects this product and its linked supplier pages. Optional 1688 access is requested on first use; declining it keeps product-only analysis available.</p>}
+      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Collects this product and its linked supplier pages, saves cleaned HTML copies in Downloads/VCT Connect, and uploads them for additional extraction. Optional 1688 access is requested on first use; declining it keeps product-only analysis available.</p>}
     </>}
     {error && <p className="error" role="alert">{error}</p>}
     {isSignedIn && collectionJob?.ownerId === userId && <div className="status" aria-live="polite">

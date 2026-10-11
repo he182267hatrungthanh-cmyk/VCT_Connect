@@ -3,7 +3,7 @@ import json
 from fastapi import Depends, HTTPException, Request
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
-from .extraction.supplier_bundle import MAX_BUNDLE_BYTES, SupplierBundle, normalize_bundle
+from .extraction.supplier_bundle import MAX_BUNDLE_BYTES, MAX_HTML_BUNDLE_BYTES, SupplierBundle, normalize_bundle
 from .storage_errors import CollectionConflict
 
 
@@ -14,11 +14,16 @@ def register_collection_routes(app, store, settings, customer_dependency, admiss
         content = bytearray()
         async for chunk in request.stream():
             content.extend(chunk)
-            if len(content) > MAX_BUNDLE_BYTES:
-                raise HTTPException(413, "Collection exceeds 32 KB")
+            if len(content) > MAX_HTML_BUNDLE_BYTES:
+                raise HTTPException(413, "HTML collection exceeds 8 MB")
         try:
+            decoded = json.loads(bytes(content))
+            if len(content) > MAX_BUNDLE_BYTES and (not isinstance(decoded, dict) or not decoded.get("html_sources")):
+                raise HTTPException(413, "Collection exceeds 32 KB")
             bundle = SupplierBundle.model_validate_json(bytes(content))
-            payload = normalize_bundle(bundle)
+            if not bundle.html_sources and len(content) > MAX_BUNDLE_BYTES:
+                raise HTTPException(413, "Collection exceeds 32 KB")
+            payload = await run_in_threadpool(normalize_bundle, bundle)
             canonical = json.dumps(bundle.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
             return bundle, payload, sha256(canonical.encode("utf-8")).hexdigest()
         except (ValidationError, ValueError, TypeError, RecursionError) as exc:

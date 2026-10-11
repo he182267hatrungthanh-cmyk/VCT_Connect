@@ -13,17 +13,18 @@ from backend.app.main import create_app
 from backend.app.storage import Store
 from backend.app.extraction.supplier_bundle import SupplierBundle, normalize_bundle
 from backend.tests.test_supplier_bundle import selected
+from backend.tests.test_browser_html import html_sources
 from backend.tests.test_worker_assessment_postgres import cleanup, WorkerProvider
 from backend.worker.main import process_local_once
 from backend.app.intelligence.assessment import build_assessment
 
 
 class Verifier:
+    def __init__(self):
+        self.owner = "collection_" + uuid4().hex
+
     def verify(self, request):
-        return VerifiedIdentity(request.headers.get("x-test-owner", "collection_" + OWNER))
-
-
-OWNER = uuid4().hex
+        return VerifiedIdentity(request.headers.get("x-test-owner", self.owner))
 
 
 @pytest.fixture
@@ -36,7 +37,40 @@ def client_store():
 
 
 def initial(value):
-    return {k: v for k, v in value.items() if k not in {"shop", "factory", "outcomes"}}
+    result = {k: v for k, v in value.items() if k not in {"shop", "factory", "outcomes"}}
+    if "html_sources" in result: result["html_sources"] = [x for x in result["html_sources"] if x["page"] == "PRODUCT"]
+    return result
+
+
+def test_combined_html_upload_enriches_one_owned_report(client_store):
+    client, store, settings = client_store
+    value = selected(); value["html_sources"] = html_sources(value)
+    analysis_id = UUID(value["job_id"])
+    try:
+        assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
+        assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
+        data = store.get(analysis_id)["supplier_data"]
+        assert data["products"][0]["packaging_display_text"] == "10 shirts per carton"
+        assert len(data["reviews"]) == 10
+        provider = WorkerProvider()
+        assert process_local_once(store, settings, assess=lambda data: build_assessment(data, provider=provider, model="fixture"))
+        with store.connect() as conn:
+            owner = conn.execute("SELECT user_id FROM analyses WHERE id=%s", (analysis_id,)).fetchone()["user_id"]
+        report = store.get_report_for_user(analysis_id, owner)["payload"]
+        assert any(e["evidence_id"] == "supplier:html_sources" for e in report["evidence"])
+        assert provider.chat_calls == 1
+    finally: cleanup(store, analysis_id)
+
+
+def test_html_upload_rejects_controls_and_oversized_selected_payload(client_store):
+    client, _, _ = client_store
+    value = selected(); value["html_sources"] = html_sources(value)
+    value["html_sources"][0]["html"] += '<button>PRIVATE_ACCOUNT_CONTROL</button>'
+    assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 422
+    value["html_sources"] = html_sources(value)
+    value["product"]["fields"]["reviews"] = [{"text": "厚" * 2000, "original_length": 2000}] * 20
+    assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 422
 
 
 @pytest.mark.parametrize("field", ["description", "claim"])
@@ -61,7 +95,7 @@ def test_collection_reserves_once_finalizes_once_and_reports_combined_sources(cl
             owner = conn.execute("SELECT user_id FROM analyses WHERE id=%s", (analysis_id,)).fetchone()["user_id"]
             used = conn.execute("SELECT used FROM admission_counters WHERE scope='CUSTOMER' AND subject=%s", (str(owner),)).fetchone()["used"]
             assert used == 1
-        assert client.post("/api/v1/analyses/collection/finish", json=value, headers={"x-test-owner": "other_"+OWNER}).status_code == 404
+        assert client.post("/api/v1/analyses/collection/finish", json=value, headers={"x-test-owner": "other_"+uuid4().hex}).status_code == 404
         for _ in range(2):
             response = client.post("/api/v1/analyses/collection/finish", json=value)
             assert response.status_code == 202, response.text
@@ -84,6 +118,7 @@ def test_collection_reserves_once_finalizes_once_and_reports_combined_sources(cl
 def test_deadline_recovery_keeps_product_without_extra_admission(client_store):
     client, store, settings = client_store
     value = selected(); value["job_id"] = str(uuid4()); analysis_id = UUID(value["job_id"])
+    value["html_sources"] = html_sources(value)
     try:
         assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
         with store.connect() as conn:
@@ -94,6 +129,7 @@ def test_deadline_recovery_keeps_product_without_extra_admission(client_store):
         assert row["status"] == "ASSESSING"
         assert len(row["reviews"]) == 10
         assert row["supplier_data"]["years_active"] is None
+        assert row["supplier_data"]["products"][0]["packaging_display_text"] == "10 shirts per carton"
         assert row["raw_evidence"]["collection_deadline_fallback"] is True
         # A late completion cannot overwrite the deadline snapshot.
         assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202

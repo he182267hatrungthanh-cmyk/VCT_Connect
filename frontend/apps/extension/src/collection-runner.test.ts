@@ -65,3 +65,25 @@ test("URL identities reject foreign hosts and conflicting member IDs", () => {
   assert.equal(factoryUrl("https://sale.1688.com/factory/card.html?memberId=b2b-abcdef123&facMemId=b2b-other123"), null);
   assert.equal(factoryUrl("https://sale.1688.com/factory/card.html?memberId=b2b-abcdef123"), factory);
 });
+
+test("HTML snapshots upload in the same reservation, with shop captured before factory navigation", async () => {
+  const pages: string[] = [];
+  const h = harness({ html: async (page, source_url) => { pages.push(page); return { page, source_url, html: '<div>public</div>' }; } });
+  let initial: SupplierBundle | undefined;
+  h.dependencies.begin = async bundle => { initial = structuredClone(bundle); };
+  await runCollection(job, h.dependencies);
+  assert.ok(initial);
+  assert.deepEqual(pages, ['PRODUCT', 'SHOP', 'FACTORY']);
+  assert.equal(initial.html_sources?.length, 1);
+  assert.equal(h.submissions[0].html_sources?.length, 3);
+  assert.equal(h.submissions[0].job_id, initial.job_id);
+});
+
+test("optional HTML failure preserves the selected evidence and final submission", async () => {
+  const h = harness({ html: async () => { throw new Error('Too large'); } });
+  await runCollection(job, h.dependencies);
+  assert.equal(h.submissions.length, 1);
+  assert.equal(h.submissions[0].html_capture_requested, true);
+  assert.ok(h.submissions[0].factory);
+  assert.equal(h.submissions[0].html_sources, undefined);
+});

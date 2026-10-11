@@ -31,10 +31,10 @@ await mkdir(output, { recursive: true });
 const manifest = {
   manifest_version: 3,
   name: "VCT Connect Source Evidence",
-  version: "0.2.0",
+  version: "0.3.0",
   description: "Capture selected visible 1688 and Taobao evidence on request.",
   key: publicKey,
-  permissions: ["activeTab", "scripting", "cookies", "storage"],
+  permissions: ["activeTab", "scripting", "cookies", "storage", "downloads"],
   host_permissions: [`${webOrigin}/*`, `https://${clerkHost}/*`],
   optional_host_permissions: ["https://*.1688.com/*"],
   background: { service_worker: "background.js", type: "module" },

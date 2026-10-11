@@ -11,12 +11,13 @@ const factory = 'https://www.1688.com/factory/b2b-abcdef123.html';
 
 function setup({ permission = true, navigation = false } = {}) {
   const stored = {}, tabs = new Map([[1, { id: 1, url: source, status: 'complete' }]]);
-  const created = [], removed = [], requests = [], listeners = new Set();
+  const created = [], removed = [], requests = [], downloads = [], listeners = new Set();
   let message, nextId = 10;
   globalThis.chrome = {
     runtime: { id: 'test-extension', onMessage: { addListener: fn => { message = fn; } } },
     storage: { local: { get: async () => stored, set: async values => Object.assign(stored, values) } },
     permissions: { contains: async () => permission },
+    downloads: { download: async options => { downloads.push(options); return downloads.length; } },
     tabs: {
       get: async id => tabs.get(id),
       create: async options => { const tab = { id: nextId++, ...options, status: 'complete' }; tabs.set(tab.id, tab); created.push(tab); return tab; },
@@ -26,6 +27,7 @@ function setup({ permission = true, navigation = false } = {}) {
     scripting: { executeScript: async ({ target, func, args }) => {
       assert.ok(tabs.has(target.tabId));
       const mode = args?.[0];
+      if (func.name === 'capturePublicHtml') return [{ result: { page: args[0], source_url: args[1], html: '<div>public fixture</div>' } }];
       if (func.name === 'captureSelectedDom') return [{ result: { source_url: source, offer_id: '1027322610455', fields: { product_title: 'Shirt' } } }];
       if (mode === 'PRODUCT_LINK') { assert.equal(args[1], source); return [{ result: shop }]; }
       if (mode === 'SHOP') return [{ result: { source_url: shop, credit_url: shop + 'page/creditdetail.html', ...(!navigation ? { factory_url: factory } : {}) } }];
@@ -51,7 +53,7 @@ function setup({ permission = true, navigation = false } = {}) {
   loaded._compile(transformSync(readFileSync(file, 'utf8'), { loader: 'ts', format: 'cjs', define: {
     VCT_WEB_ORIGIN: JSON.stringify('https://vct.example'), VCT_CLERK_PUBLISHABLE_KEY: JSON.stringify('test'), VCT_CLERK_SYNC_HOST: JSON.stringify('vct.example'),
   } }).code, file);
-  return { stored, requests, created, removed, listeners, tabs,
+  return { stored, requests, created, removed, downloads, listeners, tabs,
     send: (sender = { id: 'test-extension', url: 'chrome-extension://test-extension/popup.html' }) => new Promise(resolve => {
       const pending = message({ type: 'START_COLLECTION', tabId: 1, ownerId: 'user_one', sourceUrl: source }, sender, resolve);
       if (!pending) resolve(null);
@@ -69,6 +71,9 @@ for (const navigation of [false, true]) {
       assert.equal(h.requests.length, 2); assert.ok(h.requests[0].url.endsWith('/begin')); assert.ok(h.requests[1].url.endsWith('/finish'));
       assert.equal(h.requests[0].bundle.job_id, h.requests[1].bundle.job_id);
       assert.equal(h.requests[1].bundle.factory.shop_url, shop);
+      assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'SHOP', 'FACTORY']);
+      assert.equal(h.downloads.length, 3);
+      assert.ok(h.downloads.every(x => x.filename.startsWith(`VCT Connect/${response.id}/`) && x.url.startsWith('data:text/html;')));
       assert.equal(h.removed.length, 2); assert.ok(h.tabs.has(1));
       assert.equal(h.listeners.size, 0);
       assert.ok(!JSON.stringify(h.stored).includes('short-lived-test-token'));
@@ -86,6 +91,7 @@ test('background honors denied linked permission and rejects foreign message sen
     for (let i = 0; i < 100 && h.stored.collectionJob?.stage !== 'ASSESSING'; i++) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
     assert.equal(h.created.length, 1); // Only the result tab.
+    assert.equal(h.downloads.length, 1); // The accessible product HTML still downloads.
     assert.equal(h.requests[1].bundle.outcomes[0].status, 'NO_PERMISSION');
   } finally { globalThis.fetch = original; }
 });

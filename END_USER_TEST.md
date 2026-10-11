@@ -178,7 +178,7 @@ Follow `frontend/apps/extension/README.md` for Clerk Native API/origin setup and
 4. Click **Analyze this page** once. Expect an automatically opened web tab for the same analysis and an assessment-backed report or explicit insufficient/failure state.
 5. Close and reopen the popup. Expect the current owner's last result to load automatically, with correct progress or condensed Risk/Confidence/Coverage. **Open web result** and **Reload last result** remain usable.
 6. Switch VCT accounts and reopen. Account one's persisted result must not become visible under account two.
-7. In an extension network inspection, check that capture JSON contains only selected source fields and VCT authorization; source-platform cookies, tokens, passwords, storage and full HTML must not be included. Alibaba capture is unsupported.
+7. In an extension network inspection, check that capture JSON contains selected source fields, cleaned public HTML for linked 1688 collection and VCT authorization; source-platform cookies, tokens, passwords, storage and original full-page HTML must not be included. Alibaba capture is unsupported.
 
 ## Record acceptance
 
@@ -192,6 +192,16 @@ Follow `frontend/apps/extension/README.md` for Clerk Native API/origin setup and
 6. In a separate run, remove optional 1688 access in extension settings and decline the request. Expect a product-only report with a linked-page limitation and one quota increment. Login/challenge or missing factory navigation must also produce a partial result rather than indefinite collection.
 7. To test interruption, start another collection and close Chrome after the result ID has been reserved, keeping the server worker running. After the 60-second collection deadline, reopen that same result. Expect assessment of the stored product and explicit linked-page timeout limits. Assessment has its own duration; 60 seconds is not a report-completion promise.
 8. Switch VCT accounts and reopen the popup. The prior account's collection/result must not appear. If a submission response was lost, use **Reload last result** or retry the same collection; confirm no second quota reservation.
+
+### Automatic HTML download and supplemental extraction (extension 0.3.0)
+
+1. Reload the extension and accept Chrome's added download permission. Start a fresh 1688 analysis; existing reports retain their original evidence.
+2. Check Chrome Downloads for `VCT Connect/<new analysis ID>/product.html`, `shop.html` and `factory.html`, for each accessible source. These are cleaned public-evidence snapshots. If Chrome asks where to save files, use its normal download prompt. A disk-download failure should not stop upload or assessment.
+3. In the new report's source evidence, inspect HTML capture records. Expect `PARSED`, correct source URLs, byte counts and SHA-256 hashes for the collected pages. `NOT_CAPTURED` or `BUDGET_LIMIT` must be explained as limitations.
+4. Check additional product description, packaging/size/warning/service text when present, and the shop's company-introduction text (including displayed service experiences). Reviews must retain their loaded-card count. Certifications and activity history remain unknown unless supported by source evidence.
+5. Open the downloaded copies as text. They should exclude executable scripts, account forms/controls, buyer names, hidden content and embedded images/video. Network inspection should show the HTML snapshots within the same analysis request, followed by one assessment/report, with one quota slot consumed.
+
+Verified locally using saved-DOM browser captures and authenticated PostgreSQL/mock-provider tests. Live Chrome file-download, permission and source acceptance remain operator checks. The automatic HTML addition applies to the 1688 linked-source journey.
 
 Automated checks cover saved-DOM extraction, mocked Chrome navigation, popup restoration, PostgreSQL ownership/idempotency and deadline recovery. Real Chrome/Clerk permission and session acceptance must be recorded by the operator; fixture checks do not establish a live-source pass. Photos/video and review pagination remain outside this milestone.
 

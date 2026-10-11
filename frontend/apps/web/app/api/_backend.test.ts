@@ -147,7 +147,7 @@ test("linked collection proxy forwards bounded evidence with extension CORS and 
     const accepted = await proxyBackend(new Request(`http://localhost${path}`, { method: "POST", headers, body: "x".repeat(20_000) }), path);
     assert.equal(accepted.status, 202);
     assert.equal(accepted.headers.get("access-control-allow-origin"), headers.origin);
-    const rejected = await proxyBackend(new Request(`http://localhost${path}`, { method: "POST", headers, body: "x".repeat(32_769) }), path);
+    const rejected = await proxyBackend(new Request(`http://localhost${path}`, { method: "POST", headers, body: "x".repeat(8_000_001) }), path);
     assert.equal(rejected.status, 413); assert.equal(calls, 1);
   } finally { globalThis.fetch = original; }
 });

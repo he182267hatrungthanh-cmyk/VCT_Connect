@@ -1,6 +1,7 @@
 import { createClerkClient } from "@clerk/chrome-extension/background";
-import { captureSelectedDom, supportedOffer, type LegacyCapture } from "./capture";
+import { assertPermittedEvidence, captureSelectedDom, supportedOffer, type LegacyCapture } from "./capture";
 import { runCollection } from "./collection-runner";
+import { capturePublicHtml, MAX_HTML_BUNDLE_BYTES, type HtmlSource } from "./html-capture";
 import { captureLinkedDom, factoryUrl, shopUrl, restoreCollectionJob, type CollectionJob, type FactorySelection, type ShopSelection, type SupplierBundle } from "./linked-capture";
 
 const JOB_KEY = "collectionJob";
@@ -17,7 +18,7 @@ async function authenticate(ownerId: string): Promise<string> {
 
 async function post(phase: "begin" | "finish", bundle: SupplierBundle, ownerId: string): Promise<void> {
   const body = JSON.stringify(bundle);
-  if (new TextEncoder().encode(body).length > 32_768) throw new Error("Collection too large");
+  if (new TextEncoder().encode(body).length > (bundle.html_sources?.length ? MAX_HTML_BUNDLE_BYTES : 32_768)) throw new Error("Collection too large");
   for (let attempt = 0; attempt < 2; attempt++) {
     const token = await authenticate(ownerId);
     try {
@@ -63,6 +64,7 @@ async function start(tabId: number, ownerId: string, sourceUrl: string, respond:
   } catch { running = false; respond({ error: "Could not restore collection state" }); return; }
   const ownedTabs = new Set<number>();
   let shopTabId: number | undefined;
+  let factoryTabId: number | undefined;
   let responded = false;
   const job: CollectionJob = { id: retryJob?.id || crypto.randomUUID(), ownerId, sourceUrl, startedAt: Date.now(), stage: "STARTING" };
   async function inject<T>(id: number, mode: Parameters<typeof captureLinkedDom>[0], expectedProduct?: string): Promise<T | null> {
@@ -97,6 +99,24 @@ async function start(tabId: number, ownerId: string, sourceUrl: string, respond:
     }
     await runCollection(job, {
       now: Date.now,
+      html: async (page, source) => {
+        const id = page === "PRODUCT" ? tabId : page === "SHOP" ? shopTabId : factoryTabId;
+        if (!id) return null;
+        const [result] = await chrome.scripting.executeScript({ target: { tabId: id }, func: capturePublicHtml, args: [page, source] });
+        const captured = result?.result as HtmlSource | null;
+        if (captured) {
+          assertPermittedEvidence(captured);
+          await authenticate(ownerId);
+          try {
+            await chrome.downloads.download({
+              url: "data:text/html;charset=utf-8," + encodeURIComponent(captured.html),
+              filename: `VCT Connect/${job.id}/${page.toLowerCase()}.html`,
+              saveAs: false, conflictAction: "uniquify",
+            });
+          } catch { /* A disk download failure must not block HTML upload and assessment. */ }
+        }
+        return captured;
+      },
       product: async () => {
         await authenticate(ownerId);
         const tab = await chrome.tabs.get(tabId);
@@ -154,6 +174,7 @@ async function start(tabId: number, ownerId: string, sourceUrl: string, respond:
           const tab = await chrome.tabs.create({ url: profile, active: false });
           target = tab.id; if (target) ownedTabs.add(target);
         }
+        factoryTabId = target;
         return target ? waitSelection<FactorySelection>(target, "FACTORY", profile, deadline) : null;
       },
       cleanup: async () => { for (const id of ownedTabs) { try { await chrome.tabs.remove(id); } catch { /* user closed it */ } } },

@@ -52,8 +52,8 @@ export async function proxyBackend(
     const upload = path === "/api/v1/analyses/import" || path.startsWith("/api/v1/analyses/import?");
     const capture = path === "/api/v1/analyses/capture";
     const collection = path.startsWith("/api/v1/analyses/collection/");
-    const maximum = collection ? 32_768 : capture ? MAX_CAPTURE_BYTES : MAX_HTML_BYTES;
-    const sizeError = collection ? "Collection exceeds 32 KB" : capture ? "Capture exceeds 16 KB" : "HTML page exceeds 2 MB";
+    const maximum = collection ? 8_000_000 : capture ? MAX_CAPTURE_BYTES : MAX_HTML_BYTES;
+    const sizeError = collection ? "HTML collection exceeds 8 MB" : capture ? "Capture exceeds 16 KB" : "HTML page exceeds 2 MB";
     if ((upload || capture || collection) && Number(request.headers.get("content-length")) > maximum) {
       return withExtensionCors(request, Response.json({ detail: sizeError }, { status: 413 }));
     }

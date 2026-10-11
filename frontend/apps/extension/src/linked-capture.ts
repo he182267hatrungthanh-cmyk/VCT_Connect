@@ -1,11 +1,12 @@
 import type { LegacyCapture } from "./capture";
+import type { HtmlSource } from "./html-capture";
 
 export type ShopSelection = { source_url: string; credit_url: string; factory_url?: string };
 export type FactorySelection = { source_url: string; canonical_url: string; shop_url: string;
   claims: { name: string; value: string }[]; description?: string };
 export type CollectionOutcome = { page: "SHOP" | "FACTORY"; status: "OK" | "NO_PERMISSION" | "LINK_UNAVAILABLE" | "UNAVAILABLE" | "TIMEOUT" };
 export type SupplierBundle = { job_id: string; product: LegacyCapture; shop_url?: string;
-  shop?: ShopSelection; factory?: FactorySelection; outcomes: CollectionOutcome[] };
+  shop?: ShopSelection; factory?: FactorySelection; outcomes: CollectionOutcome[]; html_sources?: HtmlSource[]; html_capture_requested?: boolean };
 export type CollectionJob = { id: string; ownerId: string; sourceUrl: string; startedAt: number;
   stage: "STARTING" | "SHOP" | "FACTORY" | "ASSESSING" | "ERROR"; error?: string; reservationUncertain?: boolean };
 

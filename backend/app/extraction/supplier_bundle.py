@@ -1,5 +1,6 @@
 """Strict selected browser evidence for one linked 1688 collection."""
 from datetime import datetime, timezone
+import json
 from urllib.parse import parse_qs, urlsplit
 import re
 from uuid import UUID
@@ -9,6 +10,7 @@ from .contracts import evidence_coverage, evidence_status
 from .extension1688 import DomCapture, NamedValue, normalize_capture
 from .extension_merge import reject_sensitive_page_state
 from .evidence import validate_json_evidence
+from .browser_html import enrich_browser_html, MAX_HTML_BUNDLE_BYTES
 
 MAX_BUNDLE_BYTES = 32_768
 
@@ -70,15 +72,32 @@ class SupplierBundle(BaseModel):
     shop: ShopSelection | None = None
     factory: FactorySelection | None = None
     outcomes: list[CollectionOutcome] = Field(default_factory=list, max_length=2)
+    html_sources: list["HtmlSource"] = Field(default_factory=list, max_length=3)
+    html_capture_requested: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
     def unique_outcomes(self):
         if len({x.page for x in self.outcomes}) != len(self.outcomes):
             raise ValueError("Duplicate collection outcome")
+        if len({x.page for x in self.html_sources}) != len(self.html_sources):
+            raise ValueError("Duplicate HTML source")
         return self
 
 
+class HtmlSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    page: str = Field(pattern=r"^(PRODUCT|SHOP|FACTORY)$")
+    source_url: str = Field(max_length=2048)
+    html: str = Field(min_length=1, max_length=2_000_000)
+
+
+SupplierBundle.model_rebuild()
+
+
 def normalize_bundle(bundle: SupplierBundle, *, at=None):
+    selected_bytes = json.dumps(bundle.model_dump(mode="json", exclude={"html_sources"}), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(selected_bytes) > MAX_BUNDLE_BYTES:
+        raise ValueError("Selected evidence exceeds 32 KB independently of HTML")
     validate_json_evidence(bundle.model_dump(mode="json"))
     reject_sensitive_page_state(bundle.model_dump(mode="json"))
     at = at or datetime.now(timezone.utc)
@@ -135,6 +154,15 @@ def normalize_bundle(bundle: SupplierBundle, *, at=None):
                 for page, selection in (("SHOP", bundle.shop), ("FACTORY", bundle.factory))):
             raise ValueError("Collection outcomes do not match selected pages")
         data["collection_status"] = bundle.model_dump(mode="json")["outcomes"]
-    data["extractor_version"] = "1688-linked-browser-bundle.v1"
-    result["raw_payload"]["linked_collection"] = bundle.model_dump(mode="json", exclude={"product", "job_id"})
+    data["extractor_version"] = "1688-linked-browser-bundle.v2" if bundle.html_sources or bundle.html_capture_requested else "1688-linked-browser-bundle.v1"
+    result["raw_payload"]["linked_collection"] = bundle.model_dump(mode="json", exclude={"product", "job_id", "html_sources"})
+    if bundle.html_sources or bundle.html_capture_requested:
+        if any((source.page == "SHOP" and not bundle.shop) or (source.page == "FACTORY" and not bundle.factory)
+               for source in bundle.html_sources):
+            raise ValueError("HTML requires an accessible linked source")
+        result = enrich_browser_html(result, bundle.html_sources, shop_url=expected_shop,
+                                     factory_url=factory_identity(bundle.factory.source_url) if bundle.factory else None,
+                                     accessible_pages={"PRODUCT"} | ({"SHOP"} if bundle.shop else set()) | ({"FACTORY"} if bundle.factory else set()))
+    if len(json.dumps(result["supplier_data"], ensure_ascii=False).encode("utf-8")) > 48_000:
+        raise ValueError("Normalized evidence exceeds the assessment input budget")
     return result
