@@ -22,6 +22,32 @@ function environment() {
   };
 }
 
+test("guided popup enables company capture only for the product's linked company", async () => {
+  const original = globalThis.fetch;
+  environment();
+  const company = "https://shopabcdef123.1688.com/";
+  const job = { id, ownerId: record.ownerId, sourceUrl: source, startedAt: Date.now(), expiresAt: Date.now() + 1800000,
+    stage: "WAITING_COMPANY", companyUrl: company };
+  globalThis.chrome.tabs.query = async () => [{ id: 2, url: company }];
+  globalThis.chrome.storage.local.get = async () => ({ collectionJob: job });
+  globalThis.fetch = async () => { throw new Error("No report yet"); };
+  let mounted;
+  try {
+    await act(async () => { mounted = create(React.createElement(App)); });
+    assert.match(text(mounted), /Product captured · company evidence needed/);
+    assert.match(text(mounted), /Complete login or CAPTCHA/);
+    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Analyze this page").props.disabled, false);
+    await act(async () => mounted.unmount());
+    mounted = null;
+    globalThis.chrome.tabs.query = async () => [{ id: 2, url: "https://shopwrong123.1688.com/" }];
+    await act(async () => { mounted = create(React.createElement(App)); });
+    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Analyze this page").props.disabled, true);
+  } finally {
+    if (mounted) await act(async () => mounted.unmount());
+    globalThis.fetch = original;
+  }
+});
+
 test("reopened popup restores supplier collection progress only for its owner", async () => {
   const original = globalThis.fetch;
   environment();

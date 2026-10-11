@@ -131,6 +131,28 @@ export function App() {
   const collecting = collectionJob && ["STARTING", "SHOP", "FACTORY"].includes(collectionJob.stage)
     && Date.now() - collectionJob.startedAt < 70_000;
 
+  const guidedWaiting = Boolean(collectionJob && ["WAITING_COMPANY", "FINISHING"].includes(collectionJob.stage)
+    && (collectionJob.expiresAt || 0) > Date.now());
+  const linkedPage = page.status === "supported" && ["1688-company", "1688-factory"].includes(page.kind);
+  const canCapturePage = !linkedPage || Boolean(guidedWaiting && collectionJob && page.status === "supported" &&
+    (["WAITING_COMPANY", "FINISHING"].includes(collectionJob.stage) && (page.sourceUrl === collectionJob.companyUrl || page.kind === "1688-factory")));
+
+  async function finishGuided() {
+    const expectedOwner = owner.current;
+    setBusy(true); setError("");
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id || !expectedOwner) throw new Error("Sign in first");
+      const reply = await chrome.runtime.sendMessage({ type: "FINISH_GUIDED", tabId: tab.id, ownerId: expectedOwner });
+      if (owner.current !== expectedOwner) return;
+      if (!reply?.id) throw new Error(reply?.error || "Could not finish capture");
+      const stored = await chrome.storage.local.get("collectionJob");
+      setCollectionJob(restoreCollectionJob(stored.collectionJob, expectedOwner));
+      await loadResult(reply.id);
+    } catch (cause) { if (owner.current === expectedOwner) setError(cause instanceof Error ? cause.message : "Could not finish capture"); }
+    finally { if (owner.current === expectedOwner) setBusy(false); }
+  }
+
   async function capture() {
     const expectedOwner = owner.current;
     const version = ++requestVersion.current;
@@ -138,6 +160,18 @@ export function App() {
     setBusy(true); setError(""); setResult(null); setReport(null);
     try {
       if (!canSubmitEnhancedEvidence(gate)) throw new Error("Sign in on a supported source page before analyzing");
+      if (linkedPage) {
+        if (!canCapturePage) throw new Error("Start on a product, then open its linked company page.");
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id || !current()) return;
+        const reply = await chrome.runtime.sendMessage({ type: "CONTINUE_GUIDED", tabId: tab.id, ownerId: userId });
+        if (!current()) return;
+        if (!reply?.id) throw new Error(reply?.error || "Company capture failed");
+        const stored = await chrome.storage.local.get("collectionJob");
+        setCollectionJob(restoreCollectionJob(stored.collectionJob, userId!));
+        await loadResult(reply.id);
+        return;
+      }
       // Request optional source access in the button's user gesture. Declining
       // it keeps the product-only collection path available.
       if (page.status === "supported" && page.kind === "1688") {
@@ -151,6 +185,8 @@ export function App() {
         if (!reply?.id) throw new Error(reply?.error || "Could not start collection");
         const last = { analysisId: reply.id, sourceUrl: page.sourceUrl, ownerId: userId! };
         setLastCapture(last);
+        const stored = await chrome.storage.local.get("collectionJob");
+        setCollectionJob(restoreCollectionJob(stored.collectionJob, userId!));
         await loadResult(reply.id);
         return;
       }
@@ -228,11 +264,19 @@ export function App() {
       <UserButton />
       {gate === "checking-page" && <p>Checking whether this page can be analyzed…</p>}
       {gate === "unsupported-page" && <p>Enhanced analysis is disabled on unsupported pages.</p>}
-      {gate === "ready" && <p><button disabled={busy || Boolean(collecting)} onClick={() => void capture()}>{busy || collecting ? "Working…" : "Analyze this page"}</button></p>}
-      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Collects this product and its linked supplier pages, saves cleaned HTML copies in Downloads/VCT Connect, and uploads them for additional extraction. Optional 1688 access is requested on first use; declining it keeps product-only analysis available.</p>}
+      {gate === "ready" && <p><button disabled={busy || Boolean(collecting) || !canCapturePage} onClick={() => void capture()}>{busy || collecting ? "Working…" : "Analyze this page"}</button></p>}
+      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Captures the product first. Follow the highlighted supplier name, complete company login/CAPTCHA yourself, then click Analyze this page again. Cleaned HTML is downloaded and uploaded at each capture. You have 30 minutes to complete the guided capture.</p>}
     </>}
+    {isSignedIn && linkedPage && !canCapturePage && <p>Start with the product page. Company capture is available only for its pending linked supplier.</p>}
+    {isSignedIn && guidedWaiting && collectionJob && <div className="status" aria-live="polite">
+      <strong>{collectionJob.stage === "FINISHING" ? "Capture saved · retry upload" : "Product captured · company evidence needed"}</strong>
+      <p>{collectionJob.stage === "FINISHING" ? "The upload response was interrupted. Retry the saved upload; the same evidence and analysis ID will be reused." : "Close this popup and click the highlighted supplier/company name on the product. Complete login or CAPTCHA on the company page, then reopen VCT Connect and click Analyze this page. You may open its Factory profile / 工厂档案 first to capture factory details."}</p>
+      {collectionJob.companyUrl && <p><a href={collectionJob.companyUrl} target="_blank" rel="noreferrer">Open linked company page</a></p>}
+      <p><button disabled={busy} onClick={() => void finishGuided()}>{collectionJob.stage === "FINISHING" ? "Retry saved upload" : "Finish with product evidence only"}</button></p>
+      <small>Same analysis and quota slot. Login/CAPTCHA is completed by you. After 30 minutes, the server processes the stored product if capture was not finished.</small>
+    </div>}
     {error && <p className="error" role="alert">{error}</p>}
-    {isSignedIn && collectionJob?.ownerId === userId && <div className="status" aria-live="polite">
+    {isSignedIn && collectionJob?.ownerId === userId && !guidedWaiting && <div className="status" aria-live="polite">
       <strong>{collectionJob.stage === "ERROR" ? "Collection interrupted" : collecting ?
         ({ STARTING: "Reading product", SHOP: "Reading supplier shop", FACTORY: "Reading factory profile" } as Record<string, string>)[collectionJob.stage]
         : collectionJob.stage === "ASSESSING" ? "Collection finished · assessment continues" : "Collection deadline reached · stored product awaits processing"}</strong>

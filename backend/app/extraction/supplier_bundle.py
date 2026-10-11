@@ -74,6 +74,7 @@ class SupplierBundle(BaseModel):
     outcomes: list[CollectionOutcome] = Field(default_factory=list, max_length=2)
     html_sources: list["HtmlSource"] = Field(default_factory=list, max_length=3)
     html_capture_requested: bool = Field(default=False, strict=True)
+    guided: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
     def unique_outcomes(self):
@@ -113,10 +114,10 @@ def normalize_bundle(bundle: SupplierBundle, *, at=None):
         if bundle.shop.factory_url:
             factory_identity(bundle.shop.factory_url)
     if bundle.factory:
-        if not bundle.shop or not bundle.shop.factory_url:
-            raise ValueError("Factory must be linked from collected shop")
+        if (not bundle.shop or not bundle.shop.factory_url) and not (bundle.guided and expected_shop and not bundle.shop):
+            raise ValueError("Factory must be linked from collected shop or user-opened company profile")
         profile = factory_identity(bundle.factory.source_url)
-        if (factory_identity(bundle.shop.factory_url) != profile or
+        if ((bundle.shop and factory_identity(bundle.shop.factory_url) != profile) or
                 bundle.factory.canonical_url != profile or
                 shop_identity(bundle.factory.shop_url) != expected_shop):
             raise ValueError("Factory identity does not match supplier shop")

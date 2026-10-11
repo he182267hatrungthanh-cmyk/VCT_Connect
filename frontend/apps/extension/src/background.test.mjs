@@ -13,6 +13,7 @@ function setup({ permission = true, navigation = false } = {}) {
   const stored = {}, tabs = new Map([[1, { id: 1, url: source, status: 'complete' }]]);
   const created = [], removed = [], requests = [], downloads = [], listeners = new Set();
   let message, nextId = 10;
+  let currentOwner = "user_one";
   globalThis.chrome = {
     runtime: { id: 'test-extension', onMessage: { addListener: fn => { message = fn; } } },
     storage: { local: { get: async () => stored, set: async values => Object.assign(stored, values) } },
@@ -28,6 +29,7 @@ function setup({ permission = true, navigation = false } = {}) {
       assert.ok(tabs.has(target.tabId));
       const mode = args?.[0];
       if (func.name === 'capturePublicHtml') return [{ result: { page: args[0], source_url: args[1], html: '<div>public fixture</div>' } }];
+      if (func.name === 'showCompanyGuidance') return [{ result: true }];
       if (func.name === 'captureSelectedDom') return [{ result: { source_url: source, offer_id: '1027322610455', fields: { product_title: 'Shirt' } } }];
       if (mode === 'PRODUCT_LINK') { assert.equal(args[1], source); return [{ result: shop }]; }
       if (mode === 'SHOP') return [{ result: { source_url: shop, credit_url: shop + 'page/creditdetail.html', ...(!navigation ? { factory_url: factory } : {}) } }];
@@ -48,69 +50,92 @@ function setup({ permission = true, navigation = false } = {}) {
   const loaded = new Module(file); loaded.filename = file; loaded.paths = Module._nodeModulePaths(resolve('.'));
   const original = loaded.require.bind(loaded);
   loaded.require = name => name === '@clerk/chrome-extension/background' ? {
-    createClerkClient: async () => ({ user: { id: 'user_one' }, session: { getToken: async () => 'short-lived-test-token' } }),
+    createClerkClient: async () => ({ user: { id: currentOwner }, session: { getToken: async () => 'short-lived-test-token' } }),
   } : original(name);
   loaded._compile(transformSync(readFileSync(file, 'utf8'), { loader: 'ts', format: 'cjs', define: {
     VCT_WEB_ORIGIN: JSON.stringify('https://vct.example'), VCT_CLERK_PUBLISHABLE_KEY: JSON.stringify('test'), VCT_CLERK_SYNC_HOST: JSON.stringify('vct.example'),
   } }).code, file);
   return { stored, requests, created, removed, downloads, listeners, tabs,
-    send: (sender = { id: 'test-extension', url: 'chrome-extension://test-extension/popup.html' }) => new Promise(resolve => {
-      const pending = message({ type: 'START_COLLECTION', tabId: 1, ownerId: 'user_one', sourceUrl: source }, sender, resolve);
+    owner: value => { currentOwner = value; },
+    send: (type = 'START_COLLECTION', tabId = 1, sender = { id: 'test-extension', url: 'chrome-extension://test-extension/popup.html' }, ownerId = 'user_one') => new Promise(resolve => {
+      const pending = message({ type, tabId, ownerId, sourceUrl: source }, sender, resolve);
       if (!pending) resolve(null);
     }) };
+
 }
 
-for (const navigation of [false, true]) {
-  test(`background collects linked pages with ${navigation ? 'rendered navigation' : 'direct link'}, independently of popup`, async () => {
-    const original = globalThis.fetch;
-    try {
-      const h = setup({ navigation });
-      const response = await h.send(); assert.ok(response.id);
-      for (let i = 0; i < 100 && h.stored.collectionJob?.stage !== 'ASSESSING'; i++) await new Promise(resolve => setTimeout(resolve, 5));
-      assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
-      assert.equal(h.requests.length, 2); assert.ok(h.requests[0].url.endsWith('/begin')); assert.ok(h.requests[1].url.endsWith('/finish'));
-      assert.equal(h.requests[0].bundle.job_id, h.requests[1].bundle.job_id);
-      assert.equal(h.requests[1].bundle.factory.shop_url, shop);
-      assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'SHOP', 'FACTORY']);
-      assert.equal(h.downloads.length, 3);
-      assert.ok(h.downloads.every(x => x.filename.startsWith(`VCT Connect/${response.id}/`) && x.url.startsWith('data:text/html;')));
-      assert.equal(h.removed.length, 2); assert.ok(h.tabs.has(1));
-      assert.equal(h.listeners.size, 0);
-      assert.ok(!JSON.stringify(h.stored).includes('short-lived-test-token'));
-    } finally { globalThis.fetch = original; }
-  });
-}
-
-test('background honors denied linked permission and rejects foreign message senders', async () => {
+test('guided product capture pauses, survives popup closure and finishes company under the same reservation', async () => {
   const original = globalThis.fetch;
   try {
-    const h = setup({ permission: false });
-    assert.equal(await h.send({ id: 'foreign', url: 'https://evil.example/popup.html' }), null);
-    assert.equal(h.requests.length, 0);
-    await h.send();
-    for (let i = 0; i < 100 && h.stored.collectionJob?.stage !== 'ASSESSING'; i++) await new Promise(resolve => setTimeout(resolve, 5));
-    assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
-    assert.equal(h.created.length, 1); // Only the result tab.
-    assert.equal(h.downloads.length, 1); // The accessible product HTML still downloads.
-    assert.equal(h.requests[1].bundle.outcomes[0].status, 'NO_PERMISSION');
+    const h = setup();
+    const first = await h.send(); assert.ok(first.id);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
+    assert.equal(h.requests.length, 1); assert.ok(h.requests[0].bundle.guided);
+    assert.equal(h.created.length, 0); // No automatic supplier navigation.
+    assert.equal(h.downloads.length, 1);
+    assert.ok((await h.send()).error); assert.equal(h.requests.length, 1);
+    h.tabs.set(2, { id: 2, url: shop, status: 'complete' });
+    const second = await h.send('CONTINUE_GUIDED', 2);
+    assert.equal(second.id, first.id); assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests[1].bundle.job_id, first.id);
+    assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'SHOP']);
+    assert.deepEqual(h.requests[1].bundle.outcomes.map(x => x.status), ['OK', 'UNAVAILABLE']);
+    assert.equal(h.downloads.length, 2); assert.equal(h.removed.length, 0);
+    assert.equal(h.created.length, 1); assert.ok(h.created[0].url.includes(first.id));
+    assert.ok(!JSON.stringify(h.stored).includes('short-lived-test-token'));
   } finally { globalThis.fetch = original; }
 });
 
-test('lost committed begin responses retain the same reservation and reconcile without another begin', async () => {
+test('wrong supplier and login challenge remain retryable without another quota reservation', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup(); await h.send();
+    h.tabs.set(2, { id: 2, url: 'https://login.1688.com/', status: 'complete' });
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).error);
+    h.tabs.get(2).url = 'https://shopdifferent123.1688.com/';
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).error);
+    h.tabs.get(2).url = shop;
+    const execute = chrome.scripting.executeScript;
+    chrome.scripting.executeScript = async options => options.args?.[0] === 'SHOP' ? [{ result: null }] : execute(options);
+    assert.match((await h.send('CONTINUE_GUIDED', 2)).error, /not loaded/);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY'); assert.equal(h.requests.length, 1);
+    chrome.scripting.executeScript = execute;
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).id);
+    assert.equal(h.requests.length, 2);
+  } finally { globalThis.fetch = original; }
+});
+
+test('guided capture rejects foreign callers and account switching; product-only finish remains available', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup({ permission: false });
+    assert.equal(await h.send('START_COLLECTION', 1, { id: 'foreign', url: 'https://evil.example/popup.html' }), null);
+    await h.send(); h.owner('user_two');
+    assert.ok((await h.send('FINISH_GUIDED')).error);
+    assert.ok((await h.send('CONTINUE_GUIDED', 1, undefined, 'user_two')).error);
+    assert.equal(h.requests.length, 1);
+    h.owner('user_one');
+    assert.ok((await h.send('FINISH_GUIDED')).id);
+    assert.equal(h.requests.length, 2); assert.equal(h.requests[1].bundle.outcomes[0].status, 'UNAVAILABLE');
+  } finally { globalThis.fetch = original; }
+});
+
+test('lost committed begin responses retry the identical durable reservation without a new ID', async () => {
   const original = globalThis.fetch;
   try {
     const h = setup();
     const ids = [];
     globalThis.fetch = async (url, options) => {
-      if (String(url).endsWith('/begin')) { ids.push(JSON.parse(options.body).job_id); throw new TypeError('response lost'); }
+      if (String(url).endsWith('/begin')) { ids.push(JSON.parse(options.body).job_id); if (ids.length <= 2) throw new TypeError('response lost'); return Response.json({ id: ids[0] }); }
       return Response.json({ id: ids[0], status: 'PROCESSING' });
     };
     const failed = await h.send(); assert.ok(failed.error);
     assert.equal(ids.length, 2); assert.equal(ids[0], ids[1]);
     assert.equal(h.stored.collectionJob.reservationUncertain, true);
     const recovered = await h.send(); assert.equal(recovered.id, ids[0]);
-    assert.equal(ids.length, 2);
-    assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
+    assert.equal(ids.length, 3); assert.equal(ids[2], ids[0]);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
   } finally { globalThis.fetch = original; }
 });
 
@@ -125,5 +150,48 @@ test('navigation between product and supplier-link capture cannot reserve mismat
     };
     assert.ok((await h.send()).error);
     assert.equal(h.requests.length, 0);
+  } finally { globalThis.fetch = original; }
+});
+
+test('second Analyze can capture a user-opened factory with a matching company backlink', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup(); const first = await h.send();
+    h.tabs.set(2, { id: 2, url: factory, status: 'complete' });
+    const execute = chrome.scripting.executeScript;
+    chrome.scripting.executeScript = async options => {
+      const result = await execute(options);
+      if (options.args?.[0] === 'FACTORY' && options.func.name === 'captureLinkedDom') result[0].result.shop_url = 'https://shopwrong123.1688.com/';
+      return result;
+    };
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).error);
+    assert.equal(h.requests.length, 1);
+    chrome.scripting.executeScript = execute;
+    assert.equal((await h.send('CONTINUE_GUIDED', 2)).id, first.id);
+    assert.equal(h.requests[1].bundle.factory.shop_url, shop);
+    assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'FACTORY']);
+    assert.ok(!h.requests[1].bundle.shop); // Never invent a shop capture.
+  } finally { globalThis.fetch = original; }
+});
+
+test('lost finish response retries saved evidence without recapturing a changed company', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup(); await h.send();
+    h.tabs.set(2, { id: 2, url: shop, status: 'complete' });
+    const bodies = [];
+    globalThis.fetch = async (url, options) => {
+      assert.ok(String(url).endsWith('/finish'));
+      bodies.push(options.body);
+      if (bodies.length <= 2) throw new TypeError('response lost');
+      return Response.json({});
+    };
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).error);
+    assert.equal(h.stored.collectionJob.stage, 'FINISHING');
+    chrome.scripting.executeScript = async () => { throw new Error('Do not recapture'); };
+    assert.ok((await h.send('FINISH_GUIDED', 2)).id);
+    assert.equal(bodies.length, 3); assert.ok(bodies.every(body => body === bodies[0]));
+    assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
+    assert.equal(h.downloads.length, 2);
   } finally { globalThis.fetch = original; }
 });

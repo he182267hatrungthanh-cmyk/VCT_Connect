@@ -6,9 +6,9 @@ export type FactorySelection = { source_url: string; canonical_url: string; shop
   claims: { name: string; value: string }[]; description?: string };
 export type CollectionOutcome = { page: "SHOP" | "FACTORY"; status: "OK" | "NO_PERMISSION" | "LINK_UNAVAILABLE" | "UNAVAILABLE" | "TIMEOUT" };
 export type SupplierBundle = { job_id: string; product: LegacyCapture; shop_url?: string;
-  shop?: ShopSelection; factory?: FactorySelection; outcomes: CollectionOutcome[]; html_sources?: HtmlSource[]; html_capture_requested?: boolean };
+  shop?: ShopSelection; factory?: FactorySelection; outcomes: CollectionOutcome[]; html_sources?: HtmlSource[]; html_capture_requested?: boolean; guided?: boolean };
 export type CollectionJob = { id: string; ownerId: string; sourceUrl: string; startedAt: number;
-  stage: "STARTING" | "SHOP" | "FACTORY" | "ASSESSING" | "ERROR"; error?: string; reservationUncertain?: boolean };
+  stage: "STARTING" | "SHOP" | "FACTORY" | "ASSESSING" | "ERROR" | "WAITING_COMPANY" | "FINISHING"; companyUrl?: string; expiresAt?: number; error?: string; reservationUncertain?: boolean };
 
 export function restoreCollectionJob(value: unknown, owner: string): CollectionJob | null {
   if (!value || typeof value !== "object") return null;
@@ -16,7 +16,9 @@ export function restoreCollectionJob(value: unknown, owner: string): CollectionJ
   return j.ownerId === owner && typeof j.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(j.id) &&
     typeof j.sourceUrl === "string" && /^https:\/\/detail\.1688\.com\/offer\/[0-9]{6,20}\.html$/.test(j.sourceUrl) &&
     typeof j.startedAt === "number" && Number.isFinite(j.startedAt) && j.startedAt >= 0 &&
-    ["STARTING", "SHOP", "FACTORY", "ASSESSING", "ERROR"].includes(j.stage) &&
+    ["STARTING", "SHOP", "FACTORY", "ASSESSING", "ERROR", "WAITING_COMPANY", "FINISHING"].includes(j.stage) &&
+    (j.companyUrl === undefined || (typeof j.companyUrl === "string" && shopUrl(j.companyUrl) === j.companyUrl)) &&
+    (j.expiresAt === undefined || (typeof j.expiresAt === "number" && Number.isFinite(j.expiresAt))) &&
     (j.reservationUncertain === undefined || typeof j.reservationUncertain === "boolean") &&
     (j.error === undefined || (typeof j.error === "string" && j.error.length <= 500)) ? j : null;
 }

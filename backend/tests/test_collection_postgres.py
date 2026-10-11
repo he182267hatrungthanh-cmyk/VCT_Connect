@@ -63,6 +63,51 @@ def test_combined_html_upload_enriches_one_owned_report(client_store):
     finally: cleanup(store, analysis_id)
 
 
+def test_guided_capture_allows_login_time_then_finishes_company_once(client_store):
+    client, store, _ = client_store
+    value = selected(); value["guided"] = True
+    value["html_sources"] = html_sources(value)[:2]
+    value.pop("factory")
+    value["outcomes"] = [{"page": "SHOP", "status": "OK"}, {"page": "FACTORY", "status": "UNAVAILABLE"}]
+    analysis_id = UUID(value["job_id"])
+    try:
+        for _ in range(2):
+            assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        with store.connect() as conn:
+            row = conn.execute("SELECT expires_at-now() AS remaining FROM extension_collection_jobs WHERE analysis_id=%s", (analysis_id,)).fetchone()
+            assert 1700 < row["remaining"].total_seconds() <= 1800
+            # A human taking several minutes to log in must not trigger the old 60s fallback.
+            conn.execute("UPDATE extension_collection_jobs SET expires_at=expires_at-interval '5 minutes' WHERE analysis_id=%s", (analysis_id,))
+        assert store.finish_expired_collections() == 0
+        assert store.get(analysis_id)["status"] == "PROCESSING"
+        for _ in range(2):
+            assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
+        data = store.get(analysis_id)["supplier_data"]
+        assert data["company_information"]["shop_introduction_display_text"]
+        assert len(data["reviews"]) == 10
+        with store.connect() as conn:
+            assert conn.execute("SELECT count(*) AS n FROM local_queue WHERE analysis_id=%s", (analysis_id,)).fetchone()["n"] == 1
+            owner = conn.execute("SELECT user_id FROM analyses WHERE id=%s", (analysis_id,)).fetchone()["user_id"]
+            assert conn.execute("SELECT used FROM admission_counters WHERE scope='CUSTOMER' AND subject=%s", (str(owner),)).fetchone()["used"] == 1
+    finally: cleanup(store, analysis_id)
+
+
+def test_guided_user_opened_factory_requires_product_company_backlink(client_store):
+    client, store, _ = client_store
+    value = selected(); value["guided"] = True
+    value["html_sources"] = [source for source in html_sources(value) if source["page"] != "SHOP"]
+    value.pop("shop")
+    value["outcomes"] = [{"page": "SHOP", "status": "UNAVAILABLE"}, {"page": "FACTORY", "status": "OK"}]
+    analysis_id = UUID(value["job_id"])
+    try:
+        assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        wrong = json.loads(json.dumps(value)); wrong["factory"]["shop_url"] = "https://shopwrong123.1688.com/"
+        assert client.post("/api/v1/analyses/collection/finish", json=wrong).status_code == 422
+        assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
+        assert store.get(analysis_id)["supplier_data"]["years_active"] == 1
+    finally: cleanup(store, analysis_id)
+
+
 def test_html_upload_rejects_controls_and_oversized_selected_payload(client_store):
     client, _, _ = client_store
     value = selected(); value["html_sources"] = html_sources(value)

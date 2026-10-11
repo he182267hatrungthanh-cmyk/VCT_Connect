@@ -6,7 +6,7 @@ from .storage_errors import CollectionConflict
 
 class CollectionStoreMixin:
     def begin_collection(self, analysis_id, user_id, payload, digest, *, customer_limit,
-                         trial_limit, window_seconds):
+                         trial_limit, window_seconds, guided=False):
         with self.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (str(analysis_id),))
             old = conn.execute("""SELECT a.user_id, j.initial_digest FROM extension_collection_jobs j
@@ -25,8 +25,9 @@ class CollectionStoreMixin:
                             extraction_method='EXTENSION_DOM', processing_claim_token=%s,
                             attempt_count=1 WHERE id=%s""", (uuid4(), analysis_id))
             self._event(conn, analysis_id, "PROCESSING", 1)
-            conn.execute("""INSERT INTO extension_collection_jobs(analysis_id, initial_digest, initial_payload)
-                            VALUES (%s,%s,%s::jsonb)""", (analysis_id, digest, json.dumps(payload)))
+            conn.execute("""INSERT INTO extension_collection_jobs(analysis_id, initial_digest, initial_payload, expires_at)
+                            VALUES (%s,%s,%s::jsonb,now() + %s * interval '1 second')""",
+                         (analysis_id, digest, json.dumps(payload), 1800 if guided else 60))
         return analysis_id
 
     def _finish_collection(self, conn, row, payload, digest, azure):

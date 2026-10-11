@@ -1,6 +1,6 @@
 import { createClerkClient } from "@clerk/chrome-extension/background";
 import { assertPermittedEvidence, captureSelectedDom, supportedOffer, type LegacyCapture } from "./capture";
-import { runCollection } from "./collection-runner";
+import { showCompanyGuidance } from "./company-guidance";
 import { capturePublicHtml, MAX_HTML_BUNDLE_BYTES, type HtmlSource } from "./html-capture";
 import { captureLinkedDom, factoryUrl, shopUrl, restoreCollectionJob, type CollectionJob, type FactorySelection, type ShopSelection, type SupplierBundle } from "./linked-capture";
 
@@ -50,147 +50,155 @@ async function post(phase: "begin" | "finish", bundle: SupplierBundle, ownerId: 
   throw new Error("Collection request failed");
 }
 
-async function start(tabId: number, ownerId: string, sourceUrl: string, respond: (value: unknown) => void) {
-  if (running) { respond({ error: "A collection is already running. Open the existing result." }); return; }
+type GuidedSession = { job: CollectionJob; bundle: SupplierBundle; reserved: boolean };
+const SESSION_KEY = "guidedCollection";
+
+async function selected<T>(tabId: number, mode: Parameters<typeof captureLinkedDom>[0], expected?: string): Promise<T | null> {
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: captureLinkedDom, args: [mode, expected] });
+  return result?.result as T | null;
+}
+
+async function saveSession(session: GuidedSession) {
+  await chrome.storage.local.set({ [SESSION_KEY]: session, [JOB_KEY]: session.job });
+}
+
+async function captureHtml(tabId: number, page: HtmlSource["page"], source: string, session: GuidedSession) {
+  try {
+    const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: capturePublicHtml, args: [page, source] });
+    const html = result?.result as HtmlSource | null;
+    if (!html || html.page !== page || html.source_url !== source) return;
+    assertPermittedEvidence(html);
+    await authenticate(session.job.ownerId);
+    const sources = (session.bundle.html_sources || []).filter(item => item.page !== page);
+    sources.push(html);
+    const next = { ...session.bundle, html_sources: sources };
+    if (new TextEncoder().encode(JSON.stringify(next)).length > MAX_HTML_BUNDLE_BYTES) return;
+    session.bundle.html_sources = sources;
+    try {
+      await chrome.downloads.download({ url: "data:text/html;charset=utf-8," + encodeURIComponent(html.html),
+        filename: `VCT Connect/${session.job.id}/${page.toLowerCase()}.html`, saveAs: false, conflictAction: "uniquify" });
+    } catch { /* Upload does not depend on a disk download. */ }
+  } catch { /* HTML supplements selected evidence; missing snapshots remain explicit. */ }
+}
+
+async function finishSession(session: GuidedSession) {
+  if (!session.reserved) {
+    // Reconcile a lost begin response with the identical durable reservation.
+    await post("begin", session.bundle, session.job.ownerId);
+    session.reserved = true;
+  }
+  session.bundle.outcomes = [
+    { page: "SHOP", status: session.bundle.shop ? "OK" : session.bundle.shop_url ? "UNAVAILABLE" : "LINK_UNAVAILABLE" },
+    { page: "FACTORY", status: session.bundle.factory ? "OK" : "UNAVAILABLE" },
+  ];
+  session.job = { ...session.job, stage: "FINISHING" };
+  await saveSession(session); // Preserve exactly the submitted evidence for response-loss recovery.
+  await post("finish", session.bundle, session.job.ownerId);
+  session.job = { ...session.job, stage: "ASSESSING", error: undefined, reservationUncertain: false };
+  await saveSession(session);
+  try { await chrome.tabs.create({ url: `${VCT_WEB_ORIGIN}/?analysis=${encodeURIComponent(session.job.id)}` }); } catch { /* Popup keeps the result link. */ }
+}
+
+async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: string) {
+  if (running) throw new Error("Capture is already running. Reopen the popup when it finishes.");
   running = true;
-  let retryJob: CollectionJob | null = null;
+  let session: GuidedSession | undefined;
   try {
-    const stored = await chrome.storage.local.get(JOB_KEY);
-    const previous = restoreCollectionJob(stored[JOB_KEY], ownerId);
-    if (previous?.reservationUncertain && previous.sourceUrl === sourceUrl) retryJob = previous;
-    if (previous && ["STARTING", "SHOP", "FACTORY"].includes(previous.stage) && Date.now() - previous.startedAt < 70_000) {
-      respond({ error: "A collection is already running. Open the existing result." }); running = false; return;
+    await authenticate(ownerId);
+    const stored = await chrome.storage.local.get([SESSION_KEY, JOB_KEY]);
+    const candidate = stored[SESSION_KEY] as GuidedSession | undefined;
+    const job = restoreCollectionJob(candidate?.job, ownerId);
+    const pending = job && ["STARTING", "WAITING_COMPANY", "FINISHING", "ERROR"].includes(job.stage)
+      && Boolean(candidate?.bundle?.guided) && (job.expiresAt || 0) > Date.now();
+    if (pending) session = candidate;
+    if (type === "FINISH_GUIDED") {
+      if (!session) throw new Error("No pending product capture. Start a fresh product analysis.");
+      await finishSession(session); return { id: session.job.id };
     }
-  } catch { running = false; respond({ error: "Could not restore collection state" }); return; }
-  const ownedTabs = new Set<number>();
-  let shopTabId: number | undefined;
-  let factoryTabId: number | undefined;
-  let responded = false;
-  const job: CollectionJob = { id: retryJob?.id || crypto.randomUUID(), ownerId, sourceUrl, startedAt: Date.now(), stage: "STARTING" };
-  async function inject<T>(id: number, mode: Parameters<typeof captureLinkedDom>[0], expectedProduct?: string): Promise<T | null> {
-    const [result] = await chrome.scripting.executeScript({ target: { tabId: id }, func: captureLinkedDom, args: [mode, expectedProduct] });
-    return result?.result as T | null;
-  }
-  async function waitSelection<T>(id: number, mode: "SHOP" | "FACTORY", expected: string, deadline: number): Promise<T | null> {
-    const until = Math.min(deadline, Date.now() + 15_000);
-    while (Date.now() < until) {
-      const tab = await chrome.tabs.get(id);
-      const identity = mode === "SHOP" ? shopUrl(tab.url || "") : factoryUrl(tab.url || "");
-      if (tab.status === "complete" && identity !== expected) return null; // login/challenge/redirect; no bypass
-      if (identity === expected) {
-        try { const selection = await inject<T>(id, mode); if (selection) return selection; } catch { /* loading */ }
+    const tab = await chrome.tabs.get(tabId);
+    if (type === "START_COLLECTION") {
+      if (session) {
+        if (!session.reserved && session.job.sourceUrl === sourceUrl) {
+          await post("begin", session.bundle, ownerId); session.reserved = true;
+          session.job = { ...session.job, stage: "WAITING_COMPANY", error: undefined, reservationUncertain: false };
+          await saveSession(session);
+          await chrome.storage.local.set({ lastCapture: { analysisId: session.job.id, ownerId, sourceUrl: session.job.sourceUrl } });
+          return { id: session.job.id };
+        }
+        throw new Error("A product is waiting for company evidence. Open its company page or finish the saved evidence first.");
       }
-      await new Promise(resolve => setTimeout(resolve, 250));
+      if (supportedOffer(tab.url || "")?.sourceUrl !== sourceUrl) throw new Error("The active product changed.");
+      const [injected] = await chrome.scripting.executeScript({ target: { tabId }, func: captureSelectedDom });
+      const product = injected?.result as LegacyCapture | undefined;
+      if (!product || !("offer_id" in product) || product.source_url !== sourceUrl) throw new Error("Product evidence is not ready.");
+      const link = await selected<string>(tabId, "PRODUCT_LINK", sourceUrl);
+      if (supportedOffer((await chrome.tabs.get(tabId)).url || "")?.sourceUrl !== sourceUrl) throw new Error("The active product changed.");
+      const company = link ? shopUrl(link) : null;
+      const startedAt = Date.now();
+      const job: CollectionJob = { id: crypto.randomUUID(), ownerId, sourceUrl: sourceUrl!, startedAt,
+        expiresAt: startedAt + 30 * 60_000, stage: "STARTING", ...(company ? { companyUrl: company } : {}) };
+      session = { job, reserved: false, bundle: { job_id: job.id, product, guided: true,
+        ...(company ? { shop_url: company } : {}), outcomes: [], html_capture_requested: true } };
+      assertPermittedEvidence(session.bundle);
+      await captureHtml(tabId, "PRODUCT", sourceUrl!, session);
+      await saveSession(session); // Durable identical begin payload before sending.
+      await post("begin", session.bundle, ownerId); session.reserved = true;
+      session.job = { ...job, stage: "WAITING_COMPANY" };
+      await saveSession(session);
+      await chrome.storage.local.set({ lastCapture: { analysisId: job.id, ownerId, sourceUrl } });
+      if (company) {
+        try { await chrome.scripting.executeScript({ target: { tabId }, func: showCompanyGuidance, args: ["SHOP", company] }); } catch { /* Popup retains the link. */ }
+      } else await finishSession(session);
+      return { id: job.id };
     }
-    return null;
-  }
-  try {
-    if (retryJob) {
-      const token = await authenticate(ownerId);
-      const existing = await fetch(`${VCT_WEB_ORIGIN}/api/v1/analyses/${retryJob.id}`, {
-        credentials: "omit", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
-      });
-      if (existing.ok) {
-        await chrome.storage.local.set({ [JOB_KEY]: { ...job, stage: "ASSESSING" }, lastCapture: { analysisId: job.id, ownerId, sourceUrl } });
-        respond({ id: job.id }); responded = true;
-        return; // Existing reservation recovers its stored product after its deadline.
+    if (!session || !session.reserved) throw new Error("Capture a product first, or retry its pending reservation.");
+    if (session.job.stage === "FINISHING") { await finishSession(session); return { id: session.job.id }; }
+    const company = session.bundle.shop_url;
+    if (!company) throw new Error("No company link was found on the product.");
+    if (session.job.stage === "WAITING_COMPANY" && factoryUrl(tab.url || "")) {
+      const profile = factoryUrl(tab.url || "")!;
+      const factory = await selected<FactorySelection>(tabId, "FACTORY");
+      if (!factory || factory.source_url !== profile || factory.canonical_url !== profile || factory.shop_url !== company ||
+          factoryUrl((await chrome.tabs.get(tabId)).url || "") !== profile) {
+        throw new Error("Factory profile is not ready or belongs to another company. Complete login/CAPTCHA and retry.");
       }
-      if (existing.status !== 404) throw new Error("Could not reconcile reservation");
+      session.bundle.factory = factory;
+      await captureHtml(tabId, "FACTORY", profile, session);
+      await saveSession(session); await finishSession(session);
+      return { id: session.job.id };
     }
-    await runCollection(job, {
-      now: Date.now,
-      html: async (page, source) => {
-        const id = page === "PRODUCT" ? tabId : page === "SHOP" ? shopTabId : factoryTabId;
-        if (!id) return null;
-        const [result] = await chrome.scripting.executeScript({ target: { tabId: id }, func: capturePublicHtml, args: [page, source] });
-        const captured = result?.result as HtmlSource | null;
-        if (captured) {
-          assertPermittedEvidence(captured);
-          await authenticate(ownerId);
-          try {
-            await chrome.downloads.download({
-              url: "data:text/html;charset=utf-8," + encodeURIComponent(captured.html),
-              filename: `VCT Connect/${job.id}/${page.toLowerCase()}.html`,
-              saveAs: false, conflictAction: "uniquify",
-            });
-          } catch { /* A disk download failure must not block HTML upload and assessment. */ }
-        }
-        return captured;
-      },
-      product: async () => {
-        await authenticate(ownerId);
-        const tab = await chrome.tabs.get(tabId);
-        if (supportedOffer(tab.url || "")?.sourceUrl !== sourceUrl) throw new Error("Product changed");
-        const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: captureSelectedDom });
-        const product = result?.result;
-        if (!product || !("offer_id" in product)) throw new Error("Unsupported product");
-        const shopLink = await inject<string>(tabId, "PRODUCT_LINK", sourceUrl);
-        if (supportedOffer((await chrome.tabs.get(tabId)).url || "")?.sourceUrl !== sourceUrl) throw new Error("Product changed");
-        return { product: product as LegacyCapture, ...(shopLink ? { shopLink } : {}) };
-      },
-      begin: bundle => post("begin", bundle, ownerId),
-      finish: bundle => post("finish", bundle, ownerId),
-      permitted: () => chrome.permissions.contains({ origins: ORIGINS }),
-      save: value => chrome.storage.local.set({ [JOB_KEY]: value }),
-      accepted: async value => {
-        await chrome.storage.local.set({ lastCapture: { analysisId: value.id, ownerId, sourceUrl } });
-        respond({ id: value.id }); responded = true;
-        try { await chrome.tabs.create({ url: `${VCT_WEB_ORIGIN}/?analysis=${encodeURIComponent(value.id)}`, active: false }); } catch { /* collection still continues */ }
-      },
-      shop: async (url, deadline) => {
-        const tab = await chrome.tabs.create({ url, active: false });
-        if (!tab.id) return null;
-        ownedTabs.add(tab.id); shopTabId = tab.id;
-        return waitSelection<ShopSelection>(tab.id, "SHOP", url, deadline);
-      },
-      factory: async (shop, deadline) => {
-        let profile = shop.factory_url ? factoryUrl(shop.factory_url) : null;
-        let target: number | undefined;
-        if (!profile && shopTabId) {
-          // Follow the rendered navigation control; no page globals or private APIs.
-          const newTabs = new Set<number>();
-          const onCreated = (tab: chrome.tabs.Tab) => { if (tab.openerTabId === shopTabId && tab.id) newTabs.add(tab.id); };
-          chrome.tabs.onCreated.addListener(onCreated);
-          try {
-            if (await inject<string>(shopTabId, "OPEN_FACTORY") !== "CLICKED") return null;
-            const until = Math.min(deadline, Date.now() + 8000);
-            while (Date.now() < until && !profile) {
-              const candidates: number[] = [shopTabId!, ...newTabs];
-              for (const id of candidates) {
-                const tab: chrome.tabs.Tab = await chrome.tabs.get(id);
-                const found = factoryUrl(tab.url || "");
-                if (found) { profile = found; target = id; if (id !== shopTabId) ownedTabs.add(id); break; }
-              }
-              if (!profile) await new Promise(resolve => setTimeout(resolve, 250));
-            }
-          } finally {
-            chrome.tabs.onCreated.removeListener(onCreated);
-            for (const id of newTabs) ownedTabs.add(id);
-          }
-        }
-        if (!profile) return null;
-        shop.factory_url = profile;
-        if (!target) {
-          const tab = await chrome.tabs.create({ url: profile, active: false });
-          target = tab.id; if (target) ownedTabs.add(target);
-        }
-        factoryTabId = target;
-        return target ? waitSelection<FactorySelection>(target, "FACTORY", profile, deadline) : null;
-      },
-      cleanup: async () => { for (const id of ownedTabs) { try { await chrome.tabs.remove(id); } catch { /* user closed it */ } } },
-    });
-  } finally {
-    running = false;
-    if (!responded) respond({ error: "Could not start collection. Check sign-in and product evidence." });
-  }
+    if (session.job.stage === "WAITING_COMPANY") {
+      if (shopUrl(tab.url || "") !== company) throw new Error("Open the company linked from this product, complete login/CAPTCHA, then try again.");
+      const shop = await selected<ShopSelection>(tabId, "SHOP");
+      if (!shop || shop.source_url !== company || shop.credit_url !== company + "page/creditdetail.html" ||
+          shopUrl((await chrome.tabs.get(tabId)).url || "") !== company) {
+        throw new Error("Company evidence is not loaded yet. Complete login/CAPTCHA and wait for the company introduction, then retry.");
+      }
+      session.bundle.shop = shop;
+      await captureHtml(tabId, "SHOP", company, session);
+      await saveSession(session);
+      await finishSession(session);
+      return { id: session.job.id };
+    }
+    throw new Error("Company capture is already finished. Start a fresh product analysis for new evidence.");
+  } catch (error) {
+    if (session && !session.reserved) {
+      session.job = { ...session.job, stage: "ERROR", reservationUncertain: true,
+        error: "Product reservation may have been saved. Retry the same product; the analysis ID will be reused." };
+      await saveSession(session);
+    }
+    throw error;
+  } finally { running = false; }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (sender.id !== chrome.runtime.id || !sender.url?.endsWith("/popup.html") || message?.type !== "START_COLLECTION") return;
-  if (!Number.isInteger(message.tabId) || typeof message.ownerId !== "string" ||
-      !message.ownerId.startsWith("user_") || !/^https:\/\/detail\.1688\.com\/offer\/[0-9]{6,20}\.html$/.test(message.sourceUrl || "")) {
+  if (sender.id !== chrome.runtime.id || !sender.url?.endsWith("/popup.html") ||
+      !["START_COLLECTION", "CONTINUE_GUIDED", "FINISH_GUIDED"].includes(message?.type)) return;
+  if (!Number.isInteger(message.tabId) || typeof message.ownerId !== "string" || !message.ownerId.startsWith("user_") ||
+      (message.type === "START_COLLECTION" && !/^https:\/\/detail\.1688\.com\/offer\/[0-9]{6,20}\.html$/.test(message.sourceUrl || ""))) {
     respond({ error: "Invalid collection request" }); return;
   }
-  void start(message.tabId, message.ownerId, message.sourceUrl, respond).catch(() => respond({ error: "Collection failed" }));
+  void guided(message.type, message.tabId, message.ownerId, message.sourceUrl)
+    .then(respond).catch(error => respond({ error: error instanceof Error ? error.message : "Capture failed" }));
   return true;
 });

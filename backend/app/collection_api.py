@@ -37,7 +37,7 @@ def register_collection_routes(app, store, settings, customer_dependency, admiss
         try:
             await run_in_threadpool(store.begin_collection, bundle.job_id, principal.user_id, payload, digest,
                 customer_limit=settings.customer_limit, trial_limit=settings.trial_customer_limit,
-                window_seconds=settings.admission_window_seconds)
+                window_seconds=settings.admission_window_seconds, guided=bundle.guided)
         except admission_error as exc:
             raise HTTPException(429, "Submission limit reached") from exc
         except CollectionConflict as exc:
