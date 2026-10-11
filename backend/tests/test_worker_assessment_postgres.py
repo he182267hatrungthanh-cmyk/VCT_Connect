@@ -289,7 +289,13 @@ def test_worker_persists_report_completes_once_and_replay_spends_no_ai(store, ad
             assert report["schema_version"] == "report.v1"
             assert report["language"] == "vi"
             assert report["payload"]["risk"]["scoring_version"] == "v0.1.0"
-            assert report["payload"]["risk"]["coverage"] == data["completeness"]
+            risk = report["payload"]["risk"]
+            supported_weight = sum(item["configured_weight"] for item in risk["dimensions"]
+                                   if item["risk"] is not None and item["effective_confidence"] > 0)
+            assert risk["coverage"] == pytest.approx(min(data["completeness"], supported_weight))
+            if risk["coverage"] < 0.45:
+                assert risk["label"] == "INSUFFICIENT_INFORMATION"
+                assert risk["overall_risk"] is None
             assert report["payload"]["supplier_summary_vi"]
             assert report["payload"]["recommended_actions_vi"]
             assert report["payload"]["limitations_vi"]

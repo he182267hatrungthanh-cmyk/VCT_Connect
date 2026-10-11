@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import re
 
 from ..extraction.contracts import EVIDENCE_FIELDS
 from .contracts import ReportEvidence, ReportFinding, ReportPayload, ReportRisk
@@ -218,6 +219,19 @@ def build_report(
                 **_as_dict(review.get("payload")),
             },
         )
+    company = _as_dict(normalized.get("company_information"))
+    profile_url = company.get("factory_profile_source_url")
+    if (normalized.get("extractor_version") == "1688-saved-factory-enrichment.v1"
+            and isinstance(profile_url, str)
+            and re.fullmatch(r"https://www\.1688\.com/factory/b2b-[a-z0-9]{6,60}\.html", profile_url)):
+        evidence_by_id["supplier:factory_profile"] = ReportEvidence(
+            evidence_id="supplier:factory_profile", source_kind="SUPPLIER_DATA",
+            source_field="company_information.factory_profile",
+            payload={"value": {
+                key: company.get(key) for key in (
+                    "factory_profile_source_url", "shop_source_url", "established_date_claim",
+                    "age_basis", "factory_profile_claims_display_text", "factory_description_display_text")
+            }, "statement_vi": "Thông tin do trang hồ sơ nhà cung cấp công bố; chưa được xác minh độc lập. Tuổi trang đã lưu chưa xác định."})
     key_risks = [item for item in report_findings if _material_risk(item)]
     positives = [
         item for item in report_findings if item.finding_type in _POSITIVE_TYPES

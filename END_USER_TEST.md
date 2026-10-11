@@ -53,6 +53,30 @@ If port 8000 is reserved, use 8080 for Uvicorn and the matching `API_INTERNAL_OR
 
 ## Retest the expanded 1688 extension (October 11 fix)
 
+### Saved shop and factory enrichment verified October 11
+
+Open `http://127.0.0.1:3000/?analysis=d0bc536b-5e16-4bd2-a794-2b3ba79a20f7` in the signed-in account used for the product capture. This is a new completed report combining ten captured product reviews with the operator-saved supplier profile. Old reports retain their original evidence.
+
+1. In **Nguồn và bằng chứng**, find `supplier:factory_profile` and `supplier:company_information`. Confirm establishment date `2025-07-14`, employees `11~50人`, custom MOQ `2000件`, private-label MOQ `5000件`, foreign-trade orders `不支持` and VAT invoice `无`. The description says `经销批发` (wholesale/distribution). These are platform claims, not independently verified legal facts.
+2. Confirm `supplier:years_active` is `1`, calculated as completed years since that date. The separate `入驻2Year` platform membership label is retained and must not be mistaken for the establishment date.
+3. Expect ten reviews and only `certifications` / `activity_history` missing from source fields. Certification badges on recommended suppliers and a link to enterprise annual reports do not fill those fields.
+4. Expect **Chưa đủ thông tin**, no overall score, 44% confidence and 15% risk coverage on this persisted run. Source-field completeness is 83.33%, but only the review-manipulation dimension has scored evidence. Populated source fields do not establish all seven risk dimensions. Saved-page age is unknown and receives no freshness credit.
+
+This import is an operator CLI workflow; the normal extraction button does not automatically collect these linked supplier pages. Direct shop navigation was blocked by browser site-safety controls, so verification used the HTML files supplied by the operator. Live automatic link-following and a web multi-page upload flow remain unimplemented. The saved shop's navigation did not contain a static factory hyperlink; the operator-supplied factory URL is checked against the profile canonical and shop backlink.
+
+To repeat the offline workflow, first load `.env` / `.env.clerk` and the local settings as shown above. From the repository root, run the command below without `--submit` for a dry run. Add `--submit` only to create another analysis and consume the normal account quota and configured model credits:
+
+```powershell
+.venv/Scripts/python.exe -m backend.app.extraction.import_factory1688 `
+  --base-analysis bce82bde-2634-4ee5-b959-b6828b6d245b `
+  --product-html "sample webpages/1688 Wholesale High-Quality Men's T-Shirts 400g American-Style Printed Heavy-Duty Pure Cotton Short-Sleeve Shirts, Sufficient Supply for Export - 阿里巴巴.html" `
+  --shop-html 'sample webpages/东莞市长安海绣服装厂店铺推荐.html' `
+  --factory-html 'sample webpages/东莞市长安海绣服装厂-企业信息查询黄页-阿里巴巴.html' `
+  --factory-url 'https://sale.1688.com/factory/card.html?memberId=b2b-222030383828763a1d&facMemId=b2b-222030383828763a1d'
+```
+
+The base analysis must be completed and customer-owned. This command requires trusted operator database access; it is not an end-user HTTP endpoint. It verifies linked source identities, excludes scripts/account state and recommendations, then queues selected evidence for the existing assessment worker.
+
 The updated extension is built at `C:\Users\eidel\Desktop\VCT Connect\frontend\apps\extension\build`; the API and continuous worker were restarted with the expanded contract. Existing reports retain their original evidence.
 
 1. In Chrome, open `chrome://extensions`, locate **VCT Connect Source Evidence**, and click **Reload**. For a new installation use **Load unpacked** with the build folder above.

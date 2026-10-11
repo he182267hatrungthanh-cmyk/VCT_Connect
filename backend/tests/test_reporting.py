@@ -4,6 +4,21 @@ from backend.app.reporting.builder import build_report
 from backend.app.reporting.contracts import REPORT_SCHEMA_VERSION
 
 
+def test_saved_factory_evidence_is_distinct_from_product_evidence():
+    assessment, snapshot, findings, evidence, reviews = source_fixture()
+    url = "https://www.1688.com/factory/b2b-222030383828763a1d.html"
+    snapshot["normalized_data"].update(extractor_version="1688-saved-factory-enrichment.v1",
+        company_information={"factory_profile_source_url": url, "established_date_claim": "2025-07-14",
+                             "factory_profile_claims_display_text": "员工总数: 11~50人"})
+    report = build_report(analysis_id="profile-test", source_url=snapshot["normalized_data"]["source_url"],
+                          snapshot=snapshot, assessment=assessment, findings=findings,
+                          evidence=evidence, raw_reviews=reviews)
+    profile = next(item for item in report.evidence if item.evidence_id == "supplier:factory_profile")
+    assert profile.payload["value"]["factory_profile_source_url"] == url
+    assert profile.payload["value"]["established_date_claim"] == "2025-07-14"
+    assert "chưa được xác minh độc lập" in profile.payload["statement_vi"]
+
+
 def source_fixture(*, insufficient=False):
     risk = {
         "schema_version": "supplier-risk.v0.1",
