@@ -49,7 +49,7 @@ export type SupplierData = {
   years_active: number | null;
   categories: string[] | null;
   certifications: string[] | null;
-  products: Array<{ offer_id: string | null; title: string | null; source_url?: string; attributes?: Array<{ name: string; value: string }>; price_display_text?: string | null; minimum_order_display_text?: string | null }> | null;
+  products: Array<{ offer_id: string | null; title: string | null; source_url?: string; attributes?: Array<{ name: string; value: string }>; sku_options?: Array<{ name: string; value: string }>; price_display_text?: string | null; minimum_order_display_text?: string | null }> | null;
   price_information: {
     minimum?: string; maximum?: string; minimum_order_quantity?: number; display_text?: string;
     price?: { priceText: string | null; priceTitle: string | null; priceUnit: string | null; priceDesc: string | null };

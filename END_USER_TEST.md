@@ -4,13 +4,13 @@ Updated: October 11, 2026 (Asia/Bangkok). Run against the updated local checkout
 
 ## Start the application
 
-After this audit, PostgreSQL, the production web build (port 3000) and API (port 8000) remain running. The audit worker is stopped. Configure the model key if testing reports, then start **only the worker** in your own terminal using the environment-loading block and worker command below.
+Current local session: PostgreSQL, the production web build (port 3000), API (port 8000) and continuous local worker are running. The operator explicitly approved queued and newly submitted supplier evidence being processed through YEScale. Do not start duplicate services. If a service stops, use the commands below to restart it.
 
 Use PowerShell from `C:\Users\eidel\Desktop\VCT Connect`. Existing dependencies and Clerk configuration are present on this machine. For another machine, follow README setup first.
 
 For scored reports, put a valid `YESCALE_API_KEY` in the ignored root `.env`. Keep it server-only. Restart the worker after changing it. `YESCALE_MODEL` defaults to `gpt-4o-mini`; `YESCALE_EMBEDDING_MODEL` is optional for semantic review analysis. The operator configured `deepseek-v4.1-flash`; the approved saved 1688 sample completed a real YEScale report on October 11. DeepSeek V4 structured requests now disable thinking, and the supplier prompt requests concise grounded JSON within the existing token limit.
 
-Verified sample: analysis `1591350c-8239-4945-ad1c-f85ecde61f9e`. Reopen it from **Lịch sử** to inspect the existing report without another model call. It displays **Chưa đủ thông tin**, no overall risk score, 48% confidence and 50% coverage. Source references, browser refresh, History and Watchlist save/reopen/deduplication were checked. Watchlist removal, another account, real Chrome capture and fresh public-source/cloud checks remain separate acceptance steps. The bounded sample worker execution has exited; start the continuous worker below for new submissions.
+Verified sample: analysis `1591350c-8239-4945-ad1c-f85ecde61f9e`. Reopen it from **Lịch sử** to inspect the existing report without another model call. It displays **Chưa đủ thông tin**, no overall risk score, 48% confidence and 50% coverage. Source references, browser refresh, History and Watchlist save/reopen/deduplication were checked. The operator-submitted extension capture `37c466a0-037d-4c53-bd13-2b9e3d5fb464` also completed on its first worker attempt, displaying 44% confidence and 50% coverage. Watchlist removal, another account, full Chrome popup/account switching and fresh public-source/cloud checks remain separate acceptance steps.
 
 Start PostgreSQL:
 
@@ -50,6 +50,21 @@ npm run dev --prefix frontend
 Open **http://127.0.0.1:3000**. Keep these terminals open. If the audit already left these services running, use them instead of starting duplicates. After application changes, restart the API and worker; frontend development changes normally reload automatically. Ctrl+C stops each process.
 
 If port 8000 is reserved, use 8080 for Uvicorn and the matching `API_INTERNAL_ORIGIN` in the frontend terminal. Use the exact `127.0.0.1` origin consistently for Clerk and extension sync.
+
+## Retest the expanded 1688 extension (October 11 fix)
+
+The updated extension is built at `C:\Users\eidel\Desktop\VCT Connect\frontend\apps\extension\build`; the API and continuous worker were restarted with the expanded contract. Existing reports retain their original evidence.
+
+1. In Chrome, open `chrome://extensions`, locate **VCT Connect Source Evidence**, and click **Reload**. For a new installation use **Load unpacked** with the build folder above.
+2. Refresh `https://detail.1688.com/offer/1027322610455.html`. Use the same Chrome profile signed in to VCT Connect at `http://127.0.0.1:3000`.
+3. Let the supplier information, specifications, SKU, shipping and review sections load. Scroll through them so any lazy sections render, then open the extension and click **Analyze this page** once.
+4. Follow the newly opened analysis. Expect it to finish; inspect source evidence in the report instead of reopening the old analysis. In the saved-page regression, extraction includes 41 attributes, both Style values, four supplier metrics, nine dropshipping metrics, SKU price and inventory, shipping, product rating 4.6, the approximate 40+ review display and one review snippet. A fresh page can contain different values or fewer loaded sections.
+5. Confirm that **coupon ¥0.10** and **¥8.70 minimum-order/loyalty price** retain their context; **¥8.7 / inventory 790** belongs to a SKU. Platform membership is not verified founding age; shipping origin is not company headquarters; dropshipping metrics are not whole-company capacity.
+6. Inspect both the **400g title** and the **300g–350g specification** from this saved sample. The extractor preserves this contradiction instead of choosing one claim. Report source completeness and risk coverage are separate measures; do not expect either to reach 100%.
+
+Verified so far: sanitized saved-page capture in a real browser, strict API admission, normalization, existing report projection and PostgreSQL capture regressions. A new full Chrome capture/report remains the end-user acceptance step. This captures selected visible text, not all paginated reviews, image-only descriptions or off-page supplier records.
+
+For a repeatable browser fixture regression, from the repository root run `node frontend/tests/build-1688-harness.cjs`, serve `tmp` on a local port, open `1688-capture-harness.html` and click **Run capture regression**. Expect **PASS: 14 fixture checks**. The fixture excludes scripts, account state and buyer identifiers.
 
 ## 1. Guest queue check (no AI key needed)
 
