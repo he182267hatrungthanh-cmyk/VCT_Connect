@@ -34,7 +34,8 @@ export function capturePublicHtml(page: HtmlSource["page"], expected: string): H
     if (node.nodeType === Node.TEXT_NODE) return safe.createTextNode(node.textContent || "");
     if (node.nodeType !== Node.ELEMENT_NODE) return null;
     const el = node as HTMLElement;
-    if (blocked.has(el.tagName) || !visible(el)) return null;
+    // HTML tagName is uppercase, but SVG/MathML keep namespace-specific casing.
+    if (blocked.has(el.tagName.toUpperCase()) || el.namespaceURI !== "http://www.w3.org/1999/xhtml" || !visible(el)) return null;
     const out = safe.createElement(el.tagName.toLowerCase());
     for (const key of ["id", "class"]) if (el.hasAttribute(key)) out.setAttribute(key, el.getAttribute(key)!);
     if (el.tagName === "A" && el.hasAttribute("href")) {

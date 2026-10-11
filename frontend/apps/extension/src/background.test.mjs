@@ -195,3 +195,40 @@ test('lost finish response retries saved evidence without recapturing a changed 
     assert.equal(h.downloads.length, 2);
   } finally { globalThis.fetch = original; }
 });
+
+test('definitive 422 clears rejected evidence; retry makes a fresh capture instead of replaying it forever', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup();
+    globalThis.fetch = async () => Response.json({ detail: 'Invalid evidence' }, { status: 422 });
+    assert.match((await h.send()).error, /capture fresh evidence/);
+    assert.equal(h.stored.guidedCollection, null);
+    assert.equal(h.stored.collectionJob.reservationUncertain, false);
+    const rejectedId = h.stored.collectionJob.id;
+    globalThis.fetch = async (url, options) => {
+      h.requests.push({ url, bundle: JSON.parse(options.body) }); return Response.json({});
+    };
+    const retried = await h.send(); assert.ok(retried.id); assert.notEqual(retried.id, rejectedId);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
+    assert.equal(h.requests.length, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('an old cached rejected reservation recaptures automatically after a definitive 422', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup();
+    globalThis.fetch = async () => { throw new TypeError('old response lost'); };
+    await h.send();
+    const oldId = h.stored.collectionJob.id;
+    const ids = [];
+    globalThis.fetch = async (_url, options) => {
+      ids.push(JSON.parse(options.body).job_id);
+      return ids.length === 1 ? Response.json({}, { status: 422 }) : Response.json({});
+    };
+    const fresh = await h.send();
+    assert.ok(fresh.id); assert.notEqual(fresh.id, oldId);
+    assert.deepEqual(ids, [oldId, fresh.id]);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
+  } finally { globalThis.fetch = original; }
+});

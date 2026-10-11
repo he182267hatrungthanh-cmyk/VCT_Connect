@@ -1,6 +1,6 @@
 # VCT Connect browser capture
 
-This is a local, unpacked Chrome extension for a buyer viewing a supported 1688 offer or Taobao item/shop. Clicking **Analyze this page** selects visible evidence and sends it to the signed-in VCT Connect account. Version 0.4.0 uses guided 1688 product → company capture: the user opens the linked shop and completes login/CAPTCHA before clicking Analyze again. Optional 1688 access is requested; the user gesture also grants activeTab capture on the company page. Taobao uses the existing `activeTab` capture path.
+This is a local, unpacked Chrome extension for a buyer viewing a supported 1688 offer or Taobao item/shop. Clicking **Analyze this page** selects visible evidence and sends it to the signed-in VCT Connect account. Version 0.4.1 uses guided 1688 product → company capture: the user opens the linked shop and completes login/CAPTCHA before clicking Analyze again. Optional 1688 access is requested; the user gesture also grants activeTab capture on the company page. Taobao uses the existing `activeTab` capture path.
 
 ## Development setup
 
@@ -34,3 +34,5 @@ Successful/partial imports queue the same assessment/reporting path without recr
 If Windows reserves API port 8000, start Uvicorn with `--port 8080` instead. In the web app's PowerShell terminal, set `$env:API_INTERNAL_ORIGIN='http://127.0.0.1:8080'` before `npm run dev --prefix frontend`. The extension still uses web port 3000. Check reserved ports with `netsh interface ipv4 show excludedportrange protocol=tcp`.
 
 The manifest's public `key` fixes the unpacked extension ID. It is not a signing key or a credential. Keep any private signing key for future store distribution outside the repository.
+
+Version 0.4.1 fixes lowercase SVG/foreign-namespace leakage into cleaned HTML. A definitive 422 rejection discards invalid cached evidence; retry captures fresh product evidence. Ambiguous network responses retain the original reservation for safe replay.

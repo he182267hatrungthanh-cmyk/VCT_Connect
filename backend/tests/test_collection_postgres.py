@@ -2,6 +2,7 @@ from hashlib import sha256
 import json
 import os
 from uuid import UUID, uuid4
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 os.environ.setdefault("DEVELOPER_MODE", "true")
@@ -105,6 +106,21 @@ def test_guided_user_opened_factory_requires_product_company_backlink(client_sto
         assert client.post("/api/v1/analyses/collection/finish", json=wrong).status_code == 422
         assert client.post("/api/v1/analyses/collection/finish", json=value).status_code == 202
         assert store.get(analysis_id)["supplier_data"]["years_active"] == 1
+    finally: cleanup(store, analysis_id)
+
+
+def test_real_phone_product_capture_with_svg_removed_reserves_linked_company(client_store):
+    client, store, _ = client_store
+    value = json.loads((Path(__file__).parent / "fixtures/1688-product-1009411929167-bundle.json").read_text(encoding="utf-8"))
+    value["job_id"] = str(uuid4())
+    analysis_id = UUID(value["job_id"])
+    try:
+        response = client.post("/api/v1/analyses/collection/begin", json=value)
+        assert response.status_code == 202, response.text
+        with store.connect() as conn:
+            payload = conn.execute("SELECT initial_payload FROM extension_collection_jobs WHERE analysis_id=%s", (analysis_id,)).fetchone()["initial_payload"]
+        assert payload["raw_payload"]["linked_collection"]["shop_url"] == "https://shop05n8n645901d1.1688.com/"
+        assert payload["supplier_data"]["html_capture_status"][0]["status"] == "PARSED"
     finally: cleanup(store, analysis_id)
 
 

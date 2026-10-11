@@ -32,7 +32,9 @@ async function post(phase: "begin" | "finish", bundle: SupplierBundle, ownerId: 
           await chrome.storage.local.set({ lastCapture: { analysisId: bundle.job_id, ownerId, sourceUrl: bundle.product.source_url } });
           throw Object.assign(new Error("Reservation response lost"), { reservationUncertain: true });
         }
-        throw new Error(`Collection request failed (${response.status})`);
+        throw Object.assign(new Error(response.status === 422
+          ? "The captured evidence was rejected. Reload the extension, then analyze this product again to capture fresh evidence."
+          : `Collection request failed (${response.status})`), { reservationRejected: phase === "begin" && response.status === 422 });
       }
       return;
     } catch (error) {
@@ -103,6 +105,7 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
   if (running) throw new Error("Capture is already running. Reopen the popup when it finishes.");
   running = true;
   let session: GuidedSession | undefined;
+  let retryingStoredReservation = false;
   try {
     await authenticate(ownerId);
     const stored = await chrome.storage.local.get([SESSION_KEY, JOB_KEY]);
@@ -119,6 +122,7 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
     if (type === "START_COLLECTION") {
       if (session) {
         if (!session.reserved && session.job.sourceUrl === sourceUrl) {
+          retryingStoredReservation = true;
           await post("begin", session.bundle, ownerId); session.reserved = true;
           session.job = { ...session.job, stage: "WAITING_COMPANY", error: undefined, reservationUncertain: false };
           await saveSession(session);
@@ -183,6 +187,16 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
     throw new Error("Company capture is already finished. Start a fresh product analysis for new evidence.");
   } catch (error) {
     if (session && !session.reserved) {
+      if (error && typeof error === "object" && "reservationRejected" in error && error.reservationRejected) {
+        session.job = { ...session.job, stage: "ERROR", reservationUncertain: false,
+          error: "Evidence rejected before reservation. Analyze the product again to capture fresh evidence." };
+        await chrome.storage.local.set({ [SESSION_KEY]: null, [JOB_KEY]: session.job });
+        if (retryingStoredReservation && type === "START_COLLECTION") {
+          running = false;
+          return await guided(type, tabId, ownerId, sourceUrl);
+        }
+        throw error;
+      }
       session.job = { ...session.job, stage: "ERROR", reservationUncertain: true,
         error: "Product reservation may have been saved. Retry the same product; the analysis ID will be reused." };
       await saveSession(session);
