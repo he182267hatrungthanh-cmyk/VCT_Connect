@@ -173,3 +173,17 @@ test("mounted Landing submits chosen live URL, labels initial extraction and dis
     globalThis.fetch = original;
   }
 });
+
+const { ReportPages } = await component("apps/web/app/report-visuals.tsx");
+test("five-item paging exposes the remaining source text without deleting it", async () => {
+  let mounted;
+  const values = Array.from({ length: 9 }, (_, i) => `Item ${i + 1}`);
+  await act(async () => { mounted = create(React.createElement(ReportPages, { items: values, label: "Test list" }, items => React.createElement("ul", null, items.map(item => React.createElement("li", { key: item }, item))))); });
+  try {
+    assert.equal(mounted.root.findAllByType("li").length, 5);
+    await act(async () => mounted.root.findAllByType("button")[1].props.onClick());
+    assert.deepEqual(mounted.root.findAllByType("li").map(item => item.children[0]), values.slice(5));
+    await act(async () => mounted.root.findAllByType("button")[0].props.onClick());
+    assert.equal(mounted.root.findAllByType("li").length, 5);
+  } finally { await act(async () => mounted.unmount()); }
+});

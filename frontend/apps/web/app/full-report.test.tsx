@@ -254,3 +254,27 @@ test("internal scorer references are labeled without pretending to be source anc
   assert.match(html, /review-finding:quality · tham chiếu chấm điểm/);
   assert.doesNotMatch(html, /href="#evidence-review-finding-quality"/);
 });
+
+test("insufficient reports suppress a contradictory numeric risk in the overview chart", () => {
+  const report = reportFixture("INSUFFICIENT_INFORMATION");
+  report.risk.overall_risk = 12;
+  const html = renderToStaticMarkup(<FullReport report={report} />);
+  assert.match(html, /Rủi ro tổng thể: chưa đủ dữ liệu/);
+  assert.doesNotMatch(html, /12\/100/);
+  assert.match(html, /risk-chart-track unknown/);
+});
+
+test("each text section presents at most five items with remaining items accessible by paging", () => {
+  const report = reportFixture();
+  report.recommended_actions_vi = Array.from({ length: 8 }, (_, i) => `Action ${i + 1}`);
+  report.limitations_vi = Array.from({ length: 8 }, (_, i) => `Limit ${i + 1}`);
+  report.missing_data.uncertainties_vi = Array.from({ length: 8 }, (_, i) => `Uncertain ${i + 1}`);
+  const html = renderToStaticMarkup(<FullReport report={report} />);
+  for (const prefix of ["Action", "Limit", "Uncertain"]) {
+    assert.match(html, new RegExp(`${prefix} 5`));
+    assert.doesNotMatch(html, new RegExp(`${prefix} 6`));
+  }
+  assert.match(html, /Hành động đề xuất: tiếp/);
+  assert.match(html, /Giới hạn: tiếp/);
+  assert.match(html, /<details><summary class="report-source-head"/);
+});

@@ -212,3 +212,14 @@ Regression verification: browser-generated capture for product 1009411929167 was
 ### Company injection serialization retest — extension 0.4.2
 
 Reload extension 0.4.2, return to the linked company or its matching factory profile, reopen the popup and click Analyze this page. A pending product capture remains usable within its 30-minute deadline; no new product submission is needed. SHOP/FACTORY script arguments now omit the absent optional product URL instead of sending undefined, which Chrome rejects. Nine background lifecycle tests with a strict serialization guard and TypeScript passed; extension build completed.
+
+
+### Visual report acceptance — 2026-10-11
+
+1. Refresh an existing completed report at http://127.0.0.1:3000. Expect circular charts for overall risk, confidence and evidence coverage, followed by a horizontal comparison of risk dimensions. Unknown risk must appear as an empty dashed ring or striped bar, never a zero/low-risk value.
+2. Use Tổng quan, Biểu đồ rủi ro, Việc cần làm and Bằng chứng to move between report sections. Open Độ tin cậy & nguồn for the scoring details behind a dimension.
+3. In actions, findings, uncertainties or limitations with more than five items, use the arrow controls. Expect at most five text items per list page, accurate ranges, and the remaining items reachable. A different report starts at the first page.
+4. Click a source reference beneath a finding. Expect the matching evidence card to open and show its original content. Close it and click the same reference again; it must reopen. Source URLs and timestamps remain inspectable.
+5. Check a narrow/mobile window. Charts, section links, tags and source text must fit without horizontal page scrolling. Repeat with a scored report and an insufficient-information report; persisted scores and findings must retain their original meaning.
+
+Verified locally: 153 frontend tests, TypeScript and production web build passed. Browser checks covered synthetic scored/insufficient reports, five-item paging, automatic evidence opening and a 390px responsive viewport without horizontal overflow. Existing signed-in report 37c466a0-037d-4c53-bd13-2b9e3d5fb464 also showed the new charts, five-item action pages and working source links. Proof: tmp/report-redesign-proof.png. No new supplier extraction was required for this presentation change; live Chrome/CAPTCHA acceptance remains separate.

@@ -19,6 +19,16 @@ export const REPORT_SOURCE_KIND_LABELS: Record<string, string> = {
   MODEL_INTERPRETATION: "Diễn giải có cấu trúc",
 };
 
+export const REPORT_FIELD_LABELS: Record<string, string> = {
+  supplier_name: "Tên nhà cung cấp", company_information: "Hồ sơ công ty",
+  years_active: "Thời gian hoạt động", certifications: "Chứng nhận",
+  activity_history: "Lịch sử hoạt động", products: "Sản phẩm",
+  reviews: "Đánh giá người mua", rating: "Điểm đánh giá",
+  transaction_signals: "Giao dịch", delivery_information: "Giao hàng",
+  price_information: "Giá và điều khoản", categories: "Ngành hàng",
+  html_capture_status: "Trang đã thu thập", collection_status: "Nguồn đã truy cập",
+};
+
 export function reportPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }

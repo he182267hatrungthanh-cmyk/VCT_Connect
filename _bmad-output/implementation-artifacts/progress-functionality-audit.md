@@ -113,3 +113,10 @@ Operator's downloaded product HTML established the actual supplier link https://
 ### Company injection serialization — extension 0.4.2
 
 Operator screenshot exposed Chrome rejection of undefined optional args at SHOP/FACTORY injection. The selected DOM helper now omits the optional argument when absent. Chrome mocks enforce serializable arguments, covering both company and factory completion plus interruption/replay. Nine background tests and TypeScript passed; extension 0.4.2 rebuilt. Existing pending captures remain resumable within their original deadline.
+
+
+### Visual report reading experience — 2026-10-11
+
+Added circular overview charts, a horizontal risk-dimension chart with striped unknowns, section navigation, human-readable missing-field tags, five-item pagination for findings/actions/uncertainties/limitations, and expandable original source evidence. Finding references open the matching evidence even on repeat clicks. Report switching resets list pages. Numeric overall risk is suppressed for INSUFFICIENT_INFORMATION; existing persisted assessment data remains unchanged. Source URLs, timestamps and detailed scoring metadata remain reachable.
+
+Validation: 153 frontend tests, TypeScript and web production build passed. Browser verification covered synthetic scored/insufficient states, paging and evidence navigation, responsive 390px layout without overflow and the real saved report 37c466a0-037d-4c53-bd13-2b9e3d5fb464. Local web server restarted with the new build. Screenshot: tmp/report-redesign-proof.png. BMAD continued under the previously approved renderer-failure waiver; no workflow source or parallel agents used. Live extraction acceptance is still an operator check, independent of this report presentation update.
