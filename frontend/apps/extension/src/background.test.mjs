@@ -27,6 +27,8 @@ function setup({ permission = true, navigation = false } = {}) {
     },
     scripting: { executeScript: async ({ target, func, args }) => {
       assert.ok(tabs.has(target.tabId));
+      // Chrome rejects undefined args instead of coercing them to JSON null.
+      if (args) assert.ok(args.every(value => value !== undefined), 'Injection arguments must be serializable');
       const mode = args?.[0];
       if (func.name === 'capturePublicHtml') return [{ result: { page: args[0], source_url: args[1], html: '<div>public fixture</div>' } }];
       if (func.name === 'showCompanyGuidance') return [{ result: true }];

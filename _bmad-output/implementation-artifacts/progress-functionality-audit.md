@@ -109,3 +109,7 @@ BMAD renderer again failed fetching Jinja from PyPI (socket 10013); continued un
 ### Product 1009411929167 capture rejection — extension 0.4.1
 
 Operator's downloaded product HTML established the actual supplier link https://shop05n8n645901d1.1688.com/. A lowercase SVG arrow survived the uppercase-only client sanitizer and triggered the backend's correct forbidden-state 422 rejection before company guidance. Client sanitization now normalizes tag casing and excludes foreign namespaces. Definitive 422 begin rejection clears the invalid durable payload; old cached rejected captures automatically recapture after rejection, while ambiguous network responses still retain the same reservation ID. Backend validation remains strict. Saved-product browser regression retained the correct link, excluded SVG and produced HTML accepted as PARSED by the normalizer. Frontend checks: 149 passes and TypeScript. Screenshot: tmp/svg-product-proof.jpg. Live Chrome retry requires extension 0.4.1 reload.
+
+### Company injection serialization — extension 0.4.2
+
+Operator screenshot exposed Chrome rejection of undefined optional args at SHOP/FACTORY injection. The selected DOM helper now omits the optional argument when absent. Chrome mocks enforce serializable arguments, covering both company and factory completion plus interruption/replay. Nine background tests and TypeScript passed; extension 0.4.2 rebuilt. Existing pending captures remain resumable within their original deadline.

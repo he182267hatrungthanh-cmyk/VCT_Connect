@@ -184,7 +184,7 @@ Follow `frontend/apps/extension/README.md` for Clerk Native API/origin setup and
 
 ### Guided 1688 product → company capture (extension 0.4.0)
 
-1. Reload VCT Connect in `chrome://extensions`. Its unpacked directory is `C:\Users\eidel\Desktop\VCT Connect\frontend\apps\extension\build`. Confirm version **0.4.1** and that API, worker, web and database are running.
+1. Reload VCT Connect in `chrome://extensions`. Its unpacked directory is `C:\Users\eidel\Desktop\VCT Connect\frontend\apps\extension\build`. Confirm version **0.4.2** and that API, worker, web and database are running.
 2. Open the product in the signed-in Chrome profile. Load its review drawer before opening the extension. Click **Analyze this page** once. Expect **Product captured · company evidence needed**, a green outline around its supplier/company name, and an instruction card on the product. Note the analysis ID. No automatic company navigation should occur.
 3. Close the popup and click the highlighted company name, or use **Open linked company page**. Complete login/CAPTCHA yourself. Wait until the company introduction is visible. For founding date/employee/MOQ details, navigate to the company's **Factory profile / 工厂档案** before the second click instead. Reopen VCT Connect and click **Analyze this page** again.
 4. Expect company HTML capture/upload and an automatically opened web result for the **same analysis ID**. After assessment, check company introduction/source evidence, product details and retained reviews. Confirm one quota slot was consumed. Unknown certificates/activity history/factory-only claims must remain unknown.
@@ -208,3 +208,7 @@ Internal reviewer functionality currently covers blind text labels and their ann
 Reload extension 0.4.1, open product 1009411929167 and click Analyze this page again. Expect its supplier link to resolve to shop05n8n645901d1.1688.com and company guidance to appear. A prior definitively rejected cached capture is discarded and recaptured; ambiguous responses still preserve the reservation. Downloaded product HTML must exclude SVG/foreign-namespace elements. Follow the guided company capture above.
 
 Regression verification: browser-generated capture for product 1009411929167 was accepted by the normalizer and authenticated PostgreSQL begin endpoint. Ten collection API tests and nine extension background lifecycle tests passed; full frontend suite passed 149 tests before the final cached-rejection regression was added.
+
+### Company injection serialization retest — extension 0.4.2
+
+Reload extension 0.4.2, return to the linked company or its matching factory profile, reopen the popup and click Analyze this page. A pending product capture remains usable within its 30-minute deadline; no new product submission is needed. SHOP/FACTORY script arguments now omit the absent optional product URL instead of sending undefined, which Chrome rejects. Nine background lifecycle tests with a strict serialization guard and TypeScript passed; extension build completed.

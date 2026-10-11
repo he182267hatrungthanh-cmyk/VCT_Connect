@@ -56,7 +56,8 @@ type GuidedSession = { job: CollectionJob; bundle: SupplierBundle; reserved: boo
 const SESSION_KEY = "guidedCollection";
 
 async function selected<T>(tabId: number, mode: Parameters<typeof captureLinkedDom>[0], expected?: string): Promise<T | null> {
-  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: captureLinkedDom, args: [mode, expected] });
+  const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: captureLinkedDom,
+    args: expected === undefined ? [mode] : [mode, expected] });
   return result?.result as T | null;
 }
 
