@@ -262,3 +262,5 @@ Create a **new analysis** after this release. Existing reports remain saved snap
 5. Reopen the same report from history. Its scores and quotes should persist without another AI request. To compare later evidence, create another analysis rather than expecting the old report to change.
 
 The captured phone supplier replay supported product-quality and delivery concerns (55/100 each, with reduced confidence); the other five categories stayed unknown and overall coverage stayed 40%. These are recorded replay results, not promised scores for subsequent model runs.
+
+Live verification completed after PR #33 deployment: the fresh product-only saved HTML report `240DAC7E` (12 October, 18:15) shows product quality 55/100, 39% overall confidence and 25% coverage. Its six other categories and overall risk remain unknown. Reopening it from history preserved the category rationale and exact buyer complaint quote. This verifies cloud saved-HTML reporting; the Chrome/Brave product → shop → factory capture still requires the operator test above. Screenshot: `tmp/supplier-risk-live-report-proof.png`.
