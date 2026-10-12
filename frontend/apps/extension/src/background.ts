@@ -69,19 +69,22 @@ async function captureHtml(tabId: number, page: HtmlSource["page"], source: stri
   try {
     const [result] = await chrome.scripting.executeScript({ target: { tabId }, func: capturePublicHtml, args: [page, source] });
     const html = result?.result as HtmlSource | null;
-    if (!html || html.page !== page || html.source_url !== source) return;
+    if (!html || html.page !== page || html.source_url !== source) return { captured: false, downloaded: false };
     assertPermittedEvidence(html);
     await authenticate(session.job.ownerId);
     const sources = (session.bundle.html_sources || []).filter(item => item.page !== page);
     sources.push(html);
     const next = { ...session.bundle, html_sources: sources };
-    if (new TextEncoder().encode(JSON.stringify(next)).length > MAX_HTML_BUNDLE_BYTES) return;
+    if (new TextEncoder().encode(JSON.stringify(next)).length > MAX_HTML_BUNDLE_BYTES) return { captured: false, downloaded: false };
     session.bundle.html_sources = sources;
+    let downloaded = false;
     try {
       await chrome.downloads.download({ url: "data:text/html;charset=utf-8," + encodeURIComponent(html.html),
         filename: `VCT Connect/${session.job.id}/${page.toLowerCase()}.html`, saveAs: false, conflictAction: "uniquify" });
+      downloaded = true;
     } catch { /* Upload does not depend on a disk download. */ }
-  } catch { /* HTML supplements selected evidence; missing snapshots remain explicit. */ }
+    return { captured: true, downloaded };
+  } catch { return { captured: false, downloaded: false }; }
 }
 
 async function finishSession(session: GuidedSession) {
@@ -97,7 +100,7 @@ async function finishSession(session: GuidedSession) {
   session.job = { ...session.job, stage: "FINISHING" };
   await saveSession(session); // Preserve exactly the submitted evidence for response-loss recovery.
   await post("finish", session.bundle, session.job.ownerId);
-  session.job = { ...session.job, stage: "ASSESSING", error: undefined, reservationUncertain: false };
+  session.job = { ...session.job, stage: "ASSESSING", error: session.job.error?.includes("download did not start") ? session.job.error : undefined, reservationUncertain: false };
   await saveSession(session);
   try { await chrome.tabs.create({ url: `${VCT_WEB_ORIGIN}/?analysis=${encodeURIComponent(session.job.id)}` }); } catch { /* Popup keeps the result link. */ }
 }
@@ -112,7 +115,7 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
     const stored = await chrome.storage.local.get([SESSION_KEY, JOB_KEY]);
     const candidate = stored[SESSION_KEY] as GuidedSession | undefined;
     const job = restoreCollectionJob(candidate?.job, ownerId);
-    const pending = job && ["STARTING", "WAITING_COMPANY", "FINISHING", "ERROR"].includes(job.stage)
+    const pending = job && ["STARTING", "WAITING_COMPANY", "WAITING_FACTORY", "FINISHING", "ERROR"].includes(job.stage)
       && Boolean(candidate?.bundle?.guided) && (job.expiresAt || 0) > Date.now();
     if (pending) session = candidate;
     if (type === "FINISH_GUIDED") {
@@ -160,29 +163,36 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
     if (session.job.stage === "FINISHING") { await finishSession(session); return { id: session.job.id }; }
     const company = session.bundle.shop_url;
     if (!company) throw new Error("No company link was found on the product.");
-    if (session.job.stage === "WAITING_COMPANY" && factoryUrl(tab.url || "")) {
+    if (["WAITING_COMPANY", "WAITING_FACTORY"].includes(session.job.stage) && factoryUrl(tab.url || "")) {
       const profile = factoryUrl(tab.url || "")!;
+      if (session.job.factoryUrl && session.job.factoryUrl !== profile) throw new Error("Open the factory profile linked from the captured shop.");
       const factory = await selected<FactorySelection>(tabId, "FACTORY");
       if (!factory || factory.source_url !== profile || factory.canonical_url !== profile || factory.shop_url !== company ||
           factoryUrl((await chrome.tabs.get(tabId)).url || "") !== profile) {
-        throw new Error("Factory profile is not ready or belongs to another company. Complete login/CAPTCHA and retry.");
+        throw new Error("Factory company evidence is not visible or belongs to another supplier. Close the CAPTCHA with X if possible, wait for the company content, and retry Save factory HTML.");
       }
       session.bundle.factory = factory;
-      await captureHtml(tabId, "FACTORY", profile, session);
+      const snapshot = await captureHtml(tabId, "FACTORY", profile, session);
+      if (!snapshot.captured) throw new Error("No usable factory HTML was captured. Close the overlay and retry when company content is visible.");
+      if (!snapshot.downloaded) session.job = { ...session.job, error: "Factory HTML was uploaded, but its browser download did not start." };
+      if (session.bundle.shop) session.bundle.shop.factory_url = profile;
       await saveSession(session); await finishSession(session);
       return { id: session.job.id };
     }
-    if (session.job.stage === "WAITING_COMPANY") {
-      if (shopUrl(tab.url || "") !== company) throw new Error("Open the company linked from this product, complete login/CAPTCHA, then try again.");
+    if (["WAITING_COMPANY", "WAITING_FACTORY"].includes(session.job.stage)) {
+      if (shopUrl(tab.url || "") !== company) throw new Error("Open this product's linked shop, close the CAPTCHA with X if possible, and choose Save shop HTML.");
       const shop = await selected<ShopSelection>(tabId, "SHOP");
       if (!shop || shop.source_url !== company || shop.credit_url !== company + "page/creditdetail.html" ||
           shopUrl((await chrome.tabs.get(tabId)).url || "") !== company) {
-        throw new Error("Company evidence is not loaded yet. Complete login/CAPTCHA and wait for the company introduction, then retry.");
+        throw new Error("Company evidence is not loaded yet. Close the CAPTCHA with X if possible and wait for the company introduction, then retry Save shop HTML.");
       }
       session.bundle.shop = shop;
-      await captureHtml(tabId, "SHOP", company, session);
+      const snapshot = await captureHtml(tabId, "SHOP", company, session);
+      if (!snapshot.captured) throw new Error("No usable shop HTML was captured. Close the overlay and retry when the company introduction is visible.");
+      session.job = { ...session.job, stage: "WAITING_FACTORY", factoryUrl: shop.factory_url,
+        error: snapshot.downloaded ? undefined : "Shop HTML is stored for upload, but the browser download did not start. You can retry Save shop HTML." };
       await saveSession(session);
-      await finishSession(session);
+      try { await chrome.scripting.executeScript({ target: { tabId }, func: showCompanyGuidance, args: ["FACTORY", company] }); } catch { /* Popup retains next-step guidance. */ }
       return { id: session.job.id };
     }
     throw new Error("Company capture is already finished. Start a fresh product analysis for new evidence.");
@@ -208,12 +218,42 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.endsWith("/popup.html") ||
-      !["START_COLLECTION", "CONTINUE_GUIDED", "FINISH_GUIDED"].includes(message?.type)) return;
+      !["START_COLLECTION", "CONTINUE_GUIDED", "FINISH_GUIDED", "SHOW_GUIDANCE"].includes(message?.type)) return;
   if (!Number.isInteger(message.tabId) || typeof message.ownerId !== "string" || !message.ownerId.startsWith("user_") ||
       (message.type === "START_COLLECTION" && !/^https:\/\/detail\.1688\.com\/offer\/[0-9]{6,20}\.html$/.test(message.sourceUrl || ""))) {
     respond({ error: "Invalid collection request" }); return;
   }
+  if (message.type === "SHOW_GUIDANCE") {
+    void guideTab(message.tabId, message.ownerId).then(() => respond({ ok: true })).catch(() => respond({ ok: false }));
+    return true;
+  }
   void guided(message.type, message.tabId, message.ownerId, message.sourceUrl)
     .then(respond).catch(error => respond({ error: error instanceof Error ? error.message : "Capture failed" }));
   return true;
+});
+
+async function guideTab(tabId: number, ownerId?: string) {
+  const stored = await chrome.storage.local.get(SESSION_KEY);
+  const session = stored[SESSION_KEY] as GuidedSession | undefined;
+  if (!session || !session.reserved || (ownerId && session.job.ownerId !== ownerId)) return;
+  const job = restoreCollectionJob(session.job, session.job.ownerId);
+  if (!job || !["WAITING_COMPANY", "WAITING_FACTORY"].includes(job.stage) || (job.expiresAt || 0) <= Date.now()) return;
+  const tab = await chrome.tabs.get(tabId);
+  const company = session.bundle.shop_url;
+  if (!company) return;
+  if (shopUrl(tab.url || "") !== company && !factoryUrl(tab.url || "")) return;
+  await authenticate(job.ownerId);
+  let mode: "SHOP_CAPTURE" | "FACTORY_CAPTURE" | "FACTORY";
+  if (shopUrl(tab.url || "") === company) mode = job.stage === "WAITING_FACTORY" ? "FACTORY" : "SHOP_CAPTURE";
+  else {
+    const profile = factoryUrl(tab.url || "");
+    if (!profile || (job.factoryUrl && profile !== job.factoryUrl)) return;
+    const factory = await selected<FactorySelection>(tabId, "FACTORY");
+    if (!factory || factory.shop_url !== company || factory.source_url !== profile || factory.canonical_url !== profile) return;
+    mode = "FACTORY_CAPTURE";
+  }
+  await chrome.scripting.executeScript({ target: { tabId }, func: showCompanyGuidance, args: [mode, company] });
+}
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status === "complete") void guideTab(tabId).catch(() => {});
 });

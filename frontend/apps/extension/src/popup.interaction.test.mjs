@@ -35,13 +35,13 @@ test("guided popup enables company capture only for the product's linked company
   try {
     await act(async () => { mounted = create(React.createElement(App)); });
     assert.match(text(mounted), /Product captured · company evidence needed/);
-    assert.match(text(mounted), /Complete login or CAPTCHA/);
-    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Analyze this page").props.disabled, false);
+    assert.match(text(mounted), /Close any CAPTCHA overlay with X/);
+    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Save shop HTML").props.disabled, false);
     await act(async () => mounted.unmount());
     mounted = null;
     globalThis.chrome.tabs.query = async () => [{ id: 2, url: "https://shopwrong123.1688.com/" }];
     await act(async () => { mounted = create(React.createElement(App)); });
-    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Analyze this page").props.disabled, true);
+    assert.equal(mounted.root.findAllByType("button").find(b => b.children.join("") === "Save shop HTML").props.disabled, true);
   } finally {
     if (mounted) await act(async () => mounted.unmount());
     globalThis.fetch = original;
@@ -148,4 +148,27 @@ test("mounted popup successful automatic poll clears a previous lookup error", a
     globalThis.setInterval = originalInterval;
     globalThis.clearInterval = originalClear;
   }
+});
+
+
+test("shop-saved popup offers factory capture or product-shop finish without another product reservation", async () => {
+  const original=globalThis.fetch;environment();
+  const company="https://shopabcdef123.1688.com/";
+  const factory="https://www.1688.com/factory/b2b-abcdef123.html";
+  const job={id,ownerId:record.ownerId,sourceUrl:source,startedAt:Date.now(),expiresAt:Date.now()+1800000,stage:"WAITING_FACTORY",companyUrl:company,factoryUrl:factory};
+  chrome.tabs.query=async()=>[{id:3,url:factory}];
+  chrome.runtime={sendMessage:async()=>({ok:true})};
+  chrome.storage.local.get=async()=>({collectionJob:job});
+  globalThis.fetch=async()=>{throw new Error("Not reporting yet");};
+  let mounted;
+  try {
+    await act(async()=>{mounted=create(React.createElement(App));});
+    assert.match(text(mounted),/Shop HTML saved · factory evidence next/);
+    assert.match(text(mounted),/Finish with captured product & shop/);
+    assert.equal(mounted.root.findAllByType("button").find(b=>b.children.join("")==="Save factory HTML & analyze").props.disabled,false);
+    await act(async()=>mounted.unmount());mounted=null;
+    chrome.tabs.query=async()=>[{id:3,url:"https://www.1688.com/factory/b2b-other123.html"}];
+    await act(async()=>{mounted=create(React.createElement(App));});
+    assert.equal(mounted.root.findAllByType("button").find(b=>b.children.join("")==="Save factory HTML & analyze").props.disabled,true);
+  } finally {if(mounted)await act(async()=>mounted.unmount());globalThis.fetch=original;}
 });

@@ -131,11 +131,18 @@ export function App() {
   const collecting = collectionJob && ["STARTING", "SHOP", "FACTORY"].includes(collectionJob.stage)
     && Date.now() - collectionJob.startedAt < 70_000;
 
-  const guidedWaiting = Boolean(collectionJob && ["WAITING_COMPANY", "FINISHING"].includes(collectionJob.stage)
+  const guidedWaiting = Boolean(collectionJob && ["WAITING_COMPANY", "WAITING_FACTORY", "FINISHING"].includes(collectionJob.stage)
     && (collectionJob.expiresAt || 0) > Date.now());
   const linkedPage = page.status === "supported" && ["1688-company", "1688-factory"].includes(page.kind);
   const canCapturePage = !linkedPage || Boolean(guidedWaiting && collectionJob && page.status === "supported" &&
-    (["WAITING_COMPANY", "FINISHING"].includes(collectionJob.stage) && (page.sourceUrl === collectionJob.companyUrl || page.kind === "1688-factory")));
+    (["WAITING_COMPANY", "WAITING_FACTORY", "FINISHING"].includes(collectionJob.stage) && (page.sourceUrl === collectionJob.companyUrl || (page.kind === "1688-factory" && (!collectionJob.factoryUrl || page.sourceUrl === collectionJob.factoryUrl)))));
+
+  useEffect(() => {
+    if (!guidedWaiting || !linkedPage || !canCapturePage || !userId) return;
+    void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      if (tab?.id) return chrome.runtime.sendMessage({ type: "SHOW_GUIDANCE", tabId: tab.id, ownerId: userId });
+    }).catch(() => {});
+  }, [guidedWaiting, linkedPage, canCapturePage, userId]);
 
   async function finishGuided() {
     const expectedOwner = owner.current;
@@ -264,16 +271,18 @@ export function App() {
       <UserButton />
       {gate === "checking-page" && <p>Checking whether this page can be analyzed…</p>}
       {gate === "unsupported-page" && <p>Enhanced analysis is disabled on unsupported pages.</p>}
-      {gate === "ready" && <p><button disabled={busy || Boolean(collecting) || !canCapturePage} onClick={() => void capture()}>{busy || collecting ? "Working…" : "Analyze this page"}</button></p>}
-      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Captures the product first. Follow the highlighted supplier name, complete company login/CAPTCHA yourself, then click Analyze this page again. Cleaned HTML is downloaded and uploaded at each capture. You have 30 minutes to complete the guided capture.</p>}
+      {gate === "ready" && <p><button disabled={busy || Boolean(collecting) || !canCapturePage} onClick={() => void capture()}>{busy || collecting ? "Working…" : collectionJob?.stage === "FINISHING" ? "Retry saved upload" : linkedPage && page.status === "supported" ? page.kind === "1688-factory" ? "Save factory HTML & analyze" : "Save shop HTML" : "Analyze this page"}</button></p>}
+      {gate === "ready" && page.status === "supported" && page.kind === "1688" && <p>Capture the product, save the shop HTML, then save its factory profile HTML. You may close CAPTCHA overlays with X when company content remains visible. Each capture downloads cleaned HTML; the saved sources are uploaded together when you finish. You have 30 minutes.</p>}
     </>}
     {isSignedIn && linkedPage && !canCapturePage && <p>Start with the product page. Company capture is available only for its pending linked supplier.</p>}
     {isSignedIn && guidedWaiting && collectionJob && <div className="status" aria-live="polite">
-      <strong>{collectionJob.stage === "FINISHING" ? "Capture saved · retry upload" : "Product captured · company evidence needed"}</strong>
-      <p>{collectionJob.stage === "FINISHING" ? "The upload response was interrupted. Retry the saved upload; the same evidence and analysis ID will be reused." : "Close this popup and click the highlighted supplier/company name on the product. Complete login or CAPTCHA on the company page, then reopen VCT Connect and click Analyze this page. You may open its Factory profile / 工厂档案 first to capture factory details."}</p>
+      <strong>{collectionJob.stage === "FINISHING" ? "Capture saved · retry upload" : collectionJob.stage === "WAITING_FACTORY" ? "Shop HTML saved · factory evidence next" : "Product captured · company evidence needed"}</strong>
+      <p>{collectionJob.stage === "FINISHING" ? "The upload response was interrupted. Retry the saved upload; the same evidence and analysis ID will be reused." : "Close any CAPTCHA overlay with X if possible. Save shop HTML in this popup when the company introduction is visible, then follow the highlighted Factory profile / 工厂档案 link and choose Save factory HTML & analyze. If company content is absent, finish with the available evidence."}</p>
+      {collectionJob.error && <p role="status">{collectionJob.error}</p>}
+      {collectionJob.factoryUrl && <p><a href={collectionJob.factoryUrl} target="_blank" rel="noreferrer">Open linked factory profile</a></p>}
       {collectionJob.companyUrl && <p><a href={collectionJob.companyUrl} target="_blank" rel="noreferrer">Open linked company page</a></p>}
-      <p><button disabled={busy} onClick={() => void finishGuided()}>{collectionJob.stage === "FINISHING" ? "Retry saved upload" : "Finish with product evidence only"}</button></p>
-      <small>Same analysis and quota slot. Login/CAPTCHA is completed by you. After 30 minutes, the server processes the stored product if capture was not finished.</small>
+      <p><button disabled={busy} onClick={() => void finishGuided()}>{collectionJob.stage === "FINISHING" ? "Retry saved upload" : collectionJob.stage === "WAITING_FACTORY" ? "Finish with captured product & shop" : "Finish with product evidence only"}</button></p>
+      <small>Same analysis and quota slot. Only visible company content is captured; no CAPTCHA solving is required by VCT Connect. Finish within 30 minutes; otherwise the server processes the stored product.</small>
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
     {isSignedIn && collectionJob?.ownerId === userId && !guidedWaiting && <div className="status" aria-live="polite">

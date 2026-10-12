@@ -36,3 +36,14 @@ If Windows reserves API port 8000, start Uvicorn with `--port 8080` instead. In 
 The manifest's public `key` fixes the unpacked extension ID. It is not a signing key or a credential. Keep any private signing key for future store distribution outside the repository.
 
 Version 0.4.1 fixes lowercase SVG/foreign-namespace leakage into cleaned HTML. A definitive 422 rejection discards invalid cached evidence; retry captures fresh product evidence. Ambiguous network responses retain the original reservation for safe replay.
+
+
+## Guided HTML capture — 0.5.0
+
+Analyze a 1688 product, then visit its linked shop. If a CAPTCHA overlay appears, close it with X yourself; when the company introduction is visible, open the extension and choose **Save shop HTML**. This captures a cleaned public snapshot and starts its download while retaining the same pending product analysis. The shop capture does not finalize the analysis.
+
+Follow the highlighted **Factory profile / 工厂档案** control. Close any dismissible overlay and choose **Save factory HTML & analyze** in the extension. Matching product/shop/factory evidence uploads together and opens the result. **Finish with captured product & shop** is available when factory evidence is unavailable. The 30-minute reservation remains unchanged; an abandoned collection falls back to the server-stored product only.
+
+Guidance appears on matching page load or when the popup opens. A page visit alone does not capture or download data. No CAPTCHA solution or automated challenge dismissal is performed. Empty company regions remain unavailable. Canonical/profile backlinks bind sources to the same supplier; JavaScript navigation labels can be highlighted even without an href.
+
+Downloads start under `Downloads/VCT Connect/<analysis ID>/product.html`, `shop.html`, and `factory.html`. Browser download failure is reported without discarding uploadable HTML. Scripts, account controls, hidden content and media remain excluded; source-byte and transport caps remain enforced. Local build directory: `frontend/apps/extension/build`, target `http://127.0.0.1:3000`. Keep the local web/API/database/worker running.

@@ -8,7 +8,7 @@ export type CollectionOutcome = { page: "SHOP" | "FACTORY"; status: "OK" | "NO_P
 export type SupplierBundle = { job_id: string; product: LegacyCapture; shop_url?: string;
   shop?: ShopSelection; factory?: FactorySelection; outcomes: CollectionOutcome[]; html_sources?: HtmlSource[]; html_capture_requested?: boolean; guided?: boolean };
 export type CollectionJob = { id: string; ownerId: string; sourceUrl: string; startedAt: number;
-  stage: "STARTING" | "SHOP" | "FACTORY" | "ASSESSING" | "ERROR" | "WAITING_COMPANY" | "FINISHING"; companyUrl?: string; expiresAt?: number; error?: string; reservationUncertain?: boolean };
+  stage: "STARTING" | "SHOP" | "FACTORY" | "ASSESSING" | "ERROR" | "WAITING_COMPANY" | "WAITING_FACTORY" | "FINISHING"; companyUrl?: string; factoryUrl?: string; expiresAt?: number; error?: string; reservationUncertain?: boolean };
 
 export function restoreCollectionJob(value: unknown, owner: string): CollectionJob | null {
   if (!value || typeof value !== "object") return null;
@@ -16,8 +16,9 @@ export function restoreCollectionJob(value: unknown, owner: string): CollectionJ
   return j.ownerId === owner && typeof j.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(j.id) &&
     typeof j.sourceUrl === "string" && /^https:\/\/detail\.1688\.com\/offer\/[0-9]{6,20}\.html$/.test(j.sourceUrl) &&
     typeof j.startedAt === "number" && Number.isFinite(j.startedAt) && j.startedAt >= 0 &&
-    ["STARTING", "SHOP", "FACTORY", "ASSESSING", "ERROR", "WAITING_COMPANY", "FINISHING"].includes(j.stage) &&
+    ["STARTING", "SHOP", "FACTORY", "ASSESSING", "ERROR", "WAITING_COMPANY", "WAITING_FACTORY", "FINISHING"].includes(j.stage) &&
     (j.companyUrl === undefined || (typeof j.companyUrl === "string" && shopUrl(j.companyUrl) === j.companyUrl)) &&
+    (j.factoryUrl === undefined || (typeof j.factoryUrl === "string" && factoryUrl(j.factoryUrl) === j.factoryUrl)) &&
     (j.expiresAt === undefined || (typeof j.expiresAt === "number" && Number.isFinite(j.expiresAt))) &&
     (j.reservationUncertain === undefined || typeof j.reservationUncertain === "boolean") &&
     (j.error === undefined || (typeof j.error === "string" && j.error.length <= 500)) ? j : null;
@@ -93,7 +94,7 @@ export function captureLinkedDom(mode: "PRODUCT_LINK" | "SHOP" | "FACTORY" | "OP
       .find(a => visible(a) && a.href.split("?")[0] === own + "page/creditdetail.html");
     if (!credit) return null;
     // Navigation labels only: recommended supplier cards cannot become targets.
-    const nav = Array.from(document.querySelectorAll<HTMLAnchorElement>("#hd a, #shopNavigation a"))
+    const nav = Array.from(document.querySelectorAll<HTMLAnchorElement>("#hd a, #shopNavigation a, #pcTopNav a"))
       .filter(a => visible(a) && /^(工厂档案|工厂介绍|工厂名片|工厂资料|Factory profile)$/i.test(text(a, 80) || ""));
     if (mode === "OPEN_FACTORY") {
       if (nav.length !== 1) return null;

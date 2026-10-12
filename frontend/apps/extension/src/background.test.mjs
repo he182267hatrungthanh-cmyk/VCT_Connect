@@ -11,7 +11,8 @@ const factory = 'https://www.1688.com/factory/b2b-abcdef123.html';
 
 function setup({ permission = true, navigation = false } = {}) {
   const stored = {}, tabs = new Map([[1, { id: 1, url: source, status: 'complete' }]]);
-  const created = [], removed = [], requests = [], downloads = [], listeners = new Set();
+  const created = [], removed = [], requests = [], downloads = [], cues = [], listeners = new Set();
+  let updated;
   let message, nextId = 10;
   let currentOwner = "user_one";
   globalThis.chrome = {
@@ -23,6 +24,7 @@ function setup({ permission = true, navigation = false } = {}) {
       get: async id => tabs.get(id),
       create: async options => { const tab = { id: nextId++, ...options, status: 'complete' }; tabs.set(tab.id, tab); created.push(tab); return tab; },
       remove: async id => { removed.push(id); tabs.delete(id); },
+      onUpdated: { addListener: fn => { updated = fn; } },
       onCreated: { addListener: fn => listeners.add(fn), removeListener: fn => listeners.delete(fn) },
     },
     scripting: { executeScript: async ({ target, func, args }) => {
@@ -31,7 +33,7 @@ function setup({ permission = true, navigation = false } = {}) {
       if (args) assert.ok(args.every(value => value !== undefined), 'Injection arguments must be serializable');
       const mode = args?.[0];
       if (func.name === 'capturePublicHtml') return [{ result: { page: args[0], source_url: args[1], html: '<div>public fixture</div>' } }];
-      if (func.name === 'showCompanyGuidance') return [{ result: true }];
+      if (func.name === 'showCompanyGuidance') { cues.push({tabId:target.tabId,args}); return [{ result: true }]; }
       if (func.name === 'captureSelectedDom') return [{ result: { source_url: source, offer_id: '1027322610455', fields: { product_title: 'Shirt' } } }];
       if (mode === 'PRODUCT_LINK') { assert.equal(args[1], source); return [{ result: shop }]; }
       if (mode === 'SHOP') return [{ result: { source_url: shop, credit_url: shop + 'page/creditdetail.html', ...(!navigation ? { factory_url: factory } : {}) } }];
@@ -57,7 +59,8 @@ function setup({ permission = true, navigation = false } = {}) {
   loaded._compile(transformSync(readFileSync(file, 'utf8'), { loader: 'ts', format: 'cjs', define: {
     VCT_WEB_ORIGIN: JSON.stringify('https://vct.example'), VCT_CLERK_PUBLISHABLE_KEY: JSON.stringify('test'), VCT_CLERK_SYNC_HOST: JSON.stringify('vct.example'),
   } }).code, file);
-  return { stored, requests, created, removed, downloads, listeners, tabs,
+  return { stored, requests, created, removed, downloads, cues, listeners, tabs,
+    update: tabId => updated(tabId, { status: "complete" }),
     owner: value => { currentOwner = value; },
     send: (type = 'START_COLLECTION', tabId = 1, sender = { id: 'test-extension', url: 'chrome-extension://test-extension/popup.html' }, ownerId = 'user_one') => new Promise(resolve => {
       const pending = message({ type, tabId, ownerId, sourceUrl: source }, sender, resolve);
@@ -78,12 +81,16 @@ test('guided product capture pauses, survives popup closure and finishes company
     assert.ok((await h.send()).error); assert.equal(h.requests.length, 1);
     h.tabs.set(2, { id: 2, url: shop, status: 'complete' });
     const second = await h.send('CONTINUE_GUIDED', 2);
-    assert.equal(second.id, first.id); assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
+    assert.equal(second.id, first.id); assert.equal(h.stored.collectionJob.stage, 'WAITING_FACTORY');
+    assert.equal(h.requests.length, 1); assert.equal(h.downloads.length, 2);
+    h.tabs.set(3, { id: 3, url: factory, status: 'complete' });
+    assert.equal((await h.send('CONTINUE_GUIDED', 3)).id, first.id);
+    assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
     assert.equal(h.requests.length, 2);
     assert.equal(h.requests[1].bundle.job_id, first.id);
-    assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'SHOP']);
-    assert.deepEqual(h.requests[1].bundle.outcomes.map(x => x.status), ['OK', 'UNAVAILABLE']);
-    assert.equal(h.downloads.length, 2); assert.equal(h.removed.length, 0);
+    assert.deepEqual(h.requests[1].bundle.html_sources.map(x => x.page), ['PRODUCT', 'SHOP', 'FACTORY']);
+    assert.deepEqual(h.requests[1].bundle.outcomes.map(x => x.status), ['OK', 'OK']);
+    assert.equal(h.downloads.length, 3); assert.equal(h.removed.length, 0);
     assert.equal(h.created.length, 1); assert.ok(h.created[0].url.includes(first.id));
     assert.ok(!JSON.stringify(h.stored).includes('short-lived-test-token'));
   } finally { globalThis.fetch = original; }
@@ -104,7 +111,8 @@ test('wrong supplier and login challenge remain retryable without another quota 
     assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY'); assert.equal(h.requests.length, 1);
     chrome.scripting.executeScript = execute;
     assert.ok((await h.send('CONTINUE_GUIDED', 2)).id);
-    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests.length, 1);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_FACTORY');
   } finally { globalThis.fetch = original; }
 });
 
@@ -181,6 +189,7 @@ test('lost finish response retries saved evidence without recapturing a changed 
   try {
     const h = setup(); await h.send();
     h.tabs.set(2, { id: 2, url: shop, status: 'complete' });
+    assert.ok((await h.send('CONTINUE_GUIDED', 2)).id);
     const bodies = [];
     globalThis.fetch = async (url, options) => {
       assert.ok(String(url).endsWith('/finish'));
@@ -188,7 +197,7 @@ test('lost finish response retries saved evidence without recapturing a changed 
       if (bodies.length <= 2) throw new TypeError('response lost');
       return Response.json({});
     };
-    assert.ok((await h.send('CONTINUE_GUIDED', 2)).error);
+    assert.ok((await h.send('FINISH_GUIDED', 2)).error);
     assert.equal(h.stored.collectionJob.stage, 'FINISHING');
     chrome.scripting.executeScript = async () => { throw new Error('Do not recapture'); };
     assert.ok((await h.send('FINISH_GUIDED', 2)).id);
@@ -233,4 +242,54 @@ test('an old cached rejected reservation recaptures automatically after a defini
     assert.deepEqual(ids, [oldId, fresh.id]);
     assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
   } finally { globalThis.fetch = original; }
+});
+
+
+test('shop HTML stays recoverable until explicit product-shop finish, without requiring CAPTCHA solving', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup(); const first = await h.send();
+    h.tabs.set(2, {id:2,url:shop,status:'complete'});
+    await h.send('CONTINUE_GUIDED',2);
+    assert.equal(h.stored.guidedCollection.bundle.html_sources.length,2);
+    assert.equal(h.stored.collectionJob.factoryUrl,factory);
+    assert.equal(h.requests.length,1);
+    assert.ok(h.cues.some(c => c.args[0] === 'FACTORY'));
+    await h.send('SHOW_GUIDANCE',2);
+    assert.equal(h.cues.at(-1).args[0],'FACTORY');
+    assert.equal((await h.send('FINISH_GUIDED',2)).id,first.id);
+    assert.deepEqual(h.requests[1].bundle.html_sources.map(x=>x.page),['PRODUCT','SHOP']);
+    assert.deepEqual(h.requests[1].bundle.outcomes.map(x=>x.status),['OK','UNAVAILABLE']);
+  } finally {globalThis.fetch=original;}
+});
+
+test('missing visible company HTML does not claim success; download failures retain uploadable evidence', async () => {
+  const original=globalThis.fetch;
+  try {
+    const h=setup();await h.send();h.tabs.set(2,{id:2,url:shop,status:'complete'});
+    const execute=chrome.scripting.executeScript;
+    chrome.scripting.executeScript=async o=>o.func.name==='capturePublicHtml' && o.args[0]==='SHOP' ? [{result:null}] : execute(o);
+    assert.match((await h.send('CONTINUE_GUIDED',2)).error,/No usable shop HTML/);
+    assert.equal(h.stored.collectionJob.stage,'WAITING_COMPANY');assert.equal(h.requests.length,1);
+    chrome.scripting.executeScript=execute;
+    chrome.downloads.download=async()=>{throw new Error('download denied');};
+    await h.send('CONTINUE_GUIDED',2);
+    assert.equal(h.stored.collectionJob.stage,'WAITING_FACTORY');
+    assert.match(h.stored.collectionJob.error,/download did not start/);
+    assert.equal(h.stored.guidedCollection.bundle.html_sources.length,2);
+  } finally {globalThis.fetch=original;}
+});
+
+test('landing cues never capture, download or submit and ignore unrelated shops and expired sessions', async () => {
+  const original=globalThis.fetch;
+  try {
+    const h=setup();await h.send();h.tabs.set(2,{id:2,url:shop,status:'complete'});
+    await h.send('SHOW_GUIDANCE',2);
+    assert.equal(h.cues.at(-1).args[0],'SHOP_CAPTURE');
+    assert.equal(h.requests.length,1);assert.equal(h.downloads.length,1);
+    const count=h.cues.length;h.tabs.get(2).url='https://shopwrong123.1688.com/';
+    await h.send('SHOW_GUIDANCE',2);assert.equal(h.cues.length,count);
+    h.tabs.get(2).url=shop;h.stored.guidedCollection.job.expiresAt=Date.now()-1;
+    await h.send('SHOW_GUIDANCE',2);assert.equal(h.cues.length,count);
+  } finally {globalThis.fetch=original;}
 });
