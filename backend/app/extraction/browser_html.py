@@ -11,7 +11,7 @@ MAX_HTML_BYTES = 2_000_000
 MAX_HTML_BUNDLE_BYTES = 8_000_000
 
 
-def enrich_browser_html(result, sources, *, shop_url=None, factory_url=None, accessible_pages=None):
+def enrich_browser_html(result, sources, *, shop_url=None, factory_url=None, accessible_pages=None, shop_company_name=None):
     result = copy.deepcopy(result)
     data = result["supplier_data"]
     records = []
@@ -46,6 +46,7 @@ def enrich_browser_html(result, sources, *, shop_url=None, factory_url=None, acc
             return " ".join(node.text(separator=" ").split())[:limit] if node and active(node) else None
 
         before = copy.deepcopy(data)
+        content_scope = None
         if page == "PRODUCT":
             links = {n.attributes["href"] for n in parsed.css("#shopNavigation a.shop-company-name[href]")}
             if shop_url and links != {shop_url}:
@@ -72,15 +73,32 @@ def enrich_browser_html(result, sources, *, shop_url=None, factory_url=None, acc
         elif page == "SHOP":
             credits = [n for n in parsed.css("#bd_2_container_0 a[href]")
                        if n.attributes["href"] == url + "page/creditdetail.html"]
-            if len(credits) != 1:
+            names = parsed.css("#pcMainCompanyNameV2")
+            name = text(names[0], 240) if len(names) == 1 else None
+            if shop_company_name is not None and name != shop_company_name:
+                raise ValueError("HTML shop company header conflicts with selected name")
+            if len(credits) > 1 or (not credits and not name):
                 raise ValueError("HTML shop lacks its own company identity")
-            module = credits[0]
-            while module and "module-wrapper" not in module.attributes.get("class", "").split(): module = module.parent
-            value = text(module, 1600)
-            if value:
-                company = data.setdefault("company_information", {}) or {}
-                company.update(shop_source_url=url, shop_introduction_display_text=value)
-                data["company_information"] = company
+            company = data.get("company_information") or {}
+            company["shop_source_url"] = url
+            if name: company["shop_company_name_display_text"] = name
+            headers = {}
+            for selector, key in (("#pcV2SellerTagYear", "platform_tenure"), ("#pcV2MainCateLabel", "main_categories"),
+                                  ("#pcV2ServiceScoreLabel", "service_score_label"), ("#pcV2ServiceScoreValue", "service_score")):
+                value = text(parsed.css_first(selector), 240)
+                if value: headers[key] = value
+            if headers: company["shop_header_claims_display_text"] = headers
+            if credits:
+                module = credits[0]
+                while module and "module-wrapper" not in module.attributes.get("class", "").split(): module = module.parent
+                value = text(module, 1600)
+                if not value: raise ValueError("HTML company introduction is unavailable")
+                company["shop_introduction_display_text"] = value
+                content_scope = "SHOP_HEADER_AND_INTRODUCTION"
+            else:
+                content_scope = "SHOP_HEADER_ONLY"
+            company["shop_evidence_scope"] = content_scope
+            data["company_information"] = company
         else:
             links = {n.attributes["href"] for n in parsed.css("#pc_card_baseinfo a[href]")}
             if shop_url not in links:
@@ -96,7 +114,7 @@ def enrich_browser_html(result, sources, *, shop_url=None, factory_url=None, acc
         if budget_limited: data = before
         records.append({"page": page, "source_url": url, "html_sha256": sha256(encoded).hexdigest(),
                         "html_bytes": len(encoded), "status": "BUDGET_LIMIT" if budget_limited else "PARSED",
-                        "provenance": "SANITIZED_RENDERED_BROWSER_HTML"})
+                        "provenance": "SANITIZED_RENDERED_BROWSER_HTML", **({"content_scope": content_scope} if content_scope else {})})
     captured = {record["page"] for record in records}
     for page in sorted((accessible_pages or set()) - captured):
         records.append({"page": page, "source_url": {"PRODUCT": result["source_url"], "SHOP": shop_url, "FACTORY": factory_url}[page],

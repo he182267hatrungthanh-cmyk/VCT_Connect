@@ -62,11 +62,16 @@ export function capturePublicHtml(page: HtmlSource["page"], expected: string): H
     // Company introduction only, excluding neighboring recommended product modules.
     const credits = Array.from(document.querySelectorAll<HTMLAnchorElement>("#bd_2_container_0 a[href]"))
       .filter(a => a.href.split("?")[0] === expected + "page/creditdetail.html" && visible(a));
-    if (credits.length !== 1) return null;
-    const module = credits[0].closest<HTMLElement>(".module-wrapper");
-    if (!module) return null;
-    const wrapper = safe.createElement("div"); wrapper.id = "bd_2_container_0";
-    const selected = copy(module); if (selected) wrapper.appendChild(selected); safe.body.append(wrapper);
+    if (credits.length > 1) throw new Error("Ambiguous company introduction");
+    if (credits.length === 1) {
+      const module = credits[0].closest<HTMLElement>(".module-wrapper");
+      if (!module) return null;
+      const wrapper = safe.createElement("div"); wrapper.id = "bd_2_container_0";
+      const selected = copy(module); if (selected) wrapper.appendChild(selected); safe.body.append(wrapper);
+    } else {
+      const names = Array.from(document.querySelectorAll<HTMLElement>("#pcMainCompanyNameV2")).filter(visible);
+      if (names.length !== 1 || !names[0].textContent?.trim()) return null;
+    }
   }
   for (const root of roots) {
     if (roots.some(other => other !== root && other.contains(root))) continue;

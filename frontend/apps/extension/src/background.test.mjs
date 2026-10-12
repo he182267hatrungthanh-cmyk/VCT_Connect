@@ -107,7 +107,7 @@ test('wrong supplier and login challenge remain retryable without another quota 
     h.tabs.get(2).url = shop;
     const execute = chrome.scripting.executeScript;
     chrome.scripting.executeScript = async options => options.args?.[0] === 'SHOP' ? [{ result: null }] : execute(options);
-    assert.match((await h.send('CONTINUE_GUIDED', 2)).error, /not loaded/);
+    assert.match((await h.send('CONTINUE_GUIDED', 2)).error, /No supported supplier header/);
     assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY'); assert.equal(h.requests.length, 1);
     chrome.scripting.executeScript = execute;
     assert.ok((await h.send('CONTINUE_GUIDED', 2)).id);
@@ -291,5 +291,22 @@ test('landing cues never capture, download or submit and ignore unrelated shops 
     await h.send('SHOW_GUIDANCE',2);assert.equal(h.cues.length,count);
     h.tabs.get(2).url=shop;h.stored.guidedCollection.job.expiresAt=Date.now()-1;
     await h.send('SHOW_GUIDANCE',2);assert.equal(h.cues.length,count);
+  } finally {globalThis.fetch=original;}
+});
+
+
+test('visible header-only shop can be saved without a company-introduction credit link', async () => {
+  const original=globalThis.fetch;
+  try {
+    const h=setup();await h.send();h.tabs.set(2,{id:2,url:shop,status:'complete'});
+    const execute=chrome.scripting.executeScript;
+    chrome.scripting.executeScript=async o=>o.func.name==='captureLinkedDom' && o.args?.[0]==='SHOP'
+      ? [{result:{source_url:shop,company_name:'Visible supplier header'}}] : execute(o);
+    assert.ok((await h.send('CONTINUE_GUIDED',2)).id);
+    assert.equal(h.stored.collectionJob.stage,'WAITING_FACTORY');
+    assert.equal(h.stored.guidedCollection.bundle.shop.credit_url,undefined);
+    assert.equal(h.stored.guidedCollection.bundle.html_sources.length,2);
+    await h.send('FINISH_GUIDED',2);
+    assert.equal(h.requests[1].bundle.shop.company_name,'Visible supplier header');
   } finally {globalThis.fetch=original;}
 });

@@ -182,9 +182,9 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
     if (["WAITING_COMPANY", "WAITING_FACTORY"].includes(session.job.stage)) {
       if (shopUrl(tab.url || "") !== company) throw new Error("Open this product's linked shop, close the CAPTCHA with X if possible, and choose Save shop HTML.");
       const shop = await selected<ShopSelection>(tabId, "SHOP");
-      if (!shop || shop.source_url !== company || shop.credit_url !== company + "page/creditdetail.html" ||
+      if (!shop || shop.source_url !== company || (shop.credit_url !== undefined && shop.credit_url !== company + "page/creditdetail.html") || (!shop.credit_url && !shop.company_name) ||
           shopUrl((await chrome.tabs.get(tabId)).url || "") !== company) {
-        throw new Error("Company evidence is not loaded yet. Close the CAPTCHA with X if possible and wait for the company introduction, then retry Save shop HTML.");
+        throw new Error("No supported supplier header or company introduction was detected. Scroll to the company section and retry Save shop HTML; a CAPTCHA solution is not required for visible content.");
       }
       session.bundle.shop = shop;
       const snapshot = await captureHtml(tabId, "SHOP", company, session);

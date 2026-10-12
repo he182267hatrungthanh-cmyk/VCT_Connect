@@ -21,7 +21,7 @@ export function showCompanyGuidance(mode: "SHOP" | "FACTORY" | "SHOP_CAPTURE" | 
     : mode === "FACTORY"
       ? "VCT Connect: Shop HTML captured and stored. Open Factory profile / 工厂档案 (highlighted when found). Close any CAPTCHA overlay with X if possible, then open VCT Connect and click Save factory HTML & analyze. Or finish with the captured evidence in the extension."
       : mode === "SHOP_CAPTURE"
-        ? "VCT Connect: Close the CAPTCHA overlay with X if possible. When the company introduction is visible, open the VCT Connect extension and click Save shop HTML. No CAPTCHA solution is required for already visible content."
+        ? "VCT Connect: Close the CAPTCHA overlay with X if possible. When the supplier header or company introduction is visible, open the VCT Connect extension and click Save shop HTML. No CAPTCHA solution is required for already visible content."
         : "VCT Connect: Close any CAPTCHA overlay with X if possible. When the factory details are visible, open the extension and click Save factory HTML & analyze.";
   cue.append(message);
   if (!target && mode === "SHOP") {

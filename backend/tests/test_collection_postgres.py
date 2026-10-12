@@ -215,3 +215,21 @@ def test_collection_rejects_oversize_and_changed_product(client_store):
         assert client.post("/api/v1/analyses/collection/finish", json=changed).status_code == 409
         assert client.post("/api/v1/analyses/collection/finish", content='"'+'x'*32768+'"', headers={"content-type":"application/json"}).status_code == 413
     finally: cleanup(store, analysis_id)
+
+
+def test_header_only_shop_capture_finishes_one_owned_analysis(client_store):
+    from backend.tests.test_browser_html import header_only_shop_fixture
+    client, store, _ = client_store
+    value = header_only_shop_fixture(); value["guided"] = True
+    analysis_id = UUID(value["job_id"])
+    try:
+        assert client.post("/api/v1/analyses/collection/begin", json=initial(value)).status_code == 202
+        for _ in range(2):
+            response = client.post("/api/v1/analyses/collection/finish", json=value)
+            assert response.status_code == 202, response.text
+        data = store.get(analysis_id)["supplier_data"]
+        assert data["company_information"]["shop_evidence_scope"] == "SHOP_HEADER_ONLY"
+        assert "shop_introduction_display_text" not in data["company_information"]
+        with store.connect() as conn:
+            assert conn.execute("SELECT count(*) AS n FROM local_queue WHERE analysis_id=%s", (analysis_id,)).fetchone()["n"] == 1
+    finally: cleanup(store, analysis_id)

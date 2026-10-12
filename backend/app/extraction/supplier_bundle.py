@@ -45,7 +45,8 @@ def factory_identity(value: str) -> str:
 class ShopSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     source_url: str = Field(max_length=2048)
-    credit_url: str = Field(max_length=2048)
+    credit_url: str | None = Field(default=None, max_length=2048)
+    company_name: str | None = Field(default=None, min_length=1, max_length=240)
     factory_url: str | None = Field(default=None, max_length=2048)
 
 
@@ -109,8 +110,11 @@ def normalize_bundle(bundle: SupplierBundle, *, at=None):
     if bundle.shop:
         if not expected_shop or shop_identity(bundle.shop.source_url) != expected_shop:
             raise ValueError("Shop does not match product supplier link")
-        if bundle.shop.credit_url != expected_shop + "page/creditdetail.html":
+        if bundle.shop.credit_url is not None and bundle.shop.credit_url != expected_shop + "page/creditdetail.html":
             raise ValueError("Shop's own company identity is unavailable")
+        if bundle.shop.credit_url is None and (not bundle.shop.company_name or not bundle.shop.company_name.strip()
+                or not any(source.page == "SHOP" for source in bundle.html_sources)):
+            raise ValueError("Header-only shop requires its company name and captured HTML")
         if bundle.shop.factory_url:
             factory_identity(bundle.shop.factory_url)
     if bundle.factory:
@@ -163,6 +167,7 @@ def normalize_bundle(bundle: SupplierBundle, *, at=None):
             raise ValueError("HTML requires an accessible linked source")
         result = enrich_browser_html(result, bundle.html_sources, shop_url=expected_shop,
                                      factory_url=factory_identity(bundle.factory.source_url) if bundle.factory else None,
+                                     shop_company_name=bundle.shop.company_name if bundle.shop else None,
                                      accessible_pages={"PRODUCT"} | ({"SHOP"} if bundle.shop else set()) | ({"FACTORY"} if bundle.factory else set()))
     if len(json.dumps(result["supplier_data"], ensure_ascii=False).encode("utf-8")) > 48_000:
         raise ValueError("Normalized evidence exceeds the assessment input budget")

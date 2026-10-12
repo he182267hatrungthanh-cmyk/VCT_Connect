@@ -1,7 +1,7 @@
 import type { LegacyCapture } from "./capture";
 import type { HtmlSource } from "./html-capture";
 
-export type ShopSelection = { source_url: string; credit_url: string; factory_url?: string };
+export type ShopSelection = { source_url: string; credit_url?: string; company_name?: string; factory_url?: string };
 export type FactorySelection = { source_url: string; canonical_url: string; shop_url: string;
   claims: { name: string; value: string }[]; description?: string };
 export type CollectionOutcome = { page: "SHOP" | "FACTORY"; status: "OK" | "NO_PERMISSION" | "LINK_UNAVAILABLE" | "UNAVAILABLE" | "TIMEOUT" };
@@ -92,7 +92,9 @@ export function captureLinkedDom(mode: "PRODUCT_LINK" | "SHOP" | "FACTORY" | "OP
     if (canonical && shop(canonical) !== own) return null;
     const credit = Array.from(document.querySelectorAll<HTMLAnchorElement>("#bd_2_container_0 a[href]"))
       .find(a => visible(a) && a.href.split("?")[0] === own + "page/creditdetail.html");
-    if (!credit) return null;
+    const names = Array.from(document.querySelectorAll<HTMLElement>("#pcMainCompanyNameV2")).filter(visible);
+    const companyName = names.length === 1 ? text(names[0], 240) : undefined;
+    if (!credit && !companyName) return null;
     // Navigation labels only: recommended supplier cards cannot become targets.
     const nav = Array.from(document.querySelectorAll<HTMLAnchorElement>("#hd a, #shopNavigation a, #pcTopNav a"))
       .filter(a => visible(a) && /^(工厂档案|工厂介绍|工厂名片|工厂资料|Factory profile)$/i.test(text(a, 80) || ""));
@@ -102,7 +104,7 @@ export function captureLinkedDom(mode: "PRODUCT_LINK" | "SHOP" | "FACTORY" | "OP
     }
     const targets = nav.map(a => factory(a.href)).filter(Boolean);
     const profile = new Set(targets).size === 1 ? targets[0] : null;
-    return { source_url: own, credit_url: credit.href.split("?")[0], ...(profile ? { factory_url: profile } : {}) };
+    return { source_url: own, ...(credit ? { credit_url: credit.href.split("?")[0] } : {}), ...(companyName ? { company_name: companyName } : {}), ...(profile ? { factory_url: profile } : {}) };
   }
   const source = factory(location.href), canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
   if (!source || canonical !== source) return null;

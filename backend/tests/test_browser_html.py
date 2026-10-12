@@ -80,3 +80,38 @@ def test_real_browser_generated_sanitized_snapshots_parse_together():
     assert "Extra washing instructions" in result["supplier_data"]["products"][0]["description_display_text"]
     assert "After-sales experience" in result["supplier_data"]["company_information"]["shop_introduction_display_text"]
     assert "PRIVATE_" not in json.dumps(result)
+
+
+def header_only_shop_fixture():
+    value = selected()
+    value["shop"] = {"source_url": SHOP, "company_name": "Shenzhen supplier"}
+    value.pop("factory")
+    value["outcomes"] = [{"page": "SHOP", "status": "OK"}, {"page": "FACTORY", "status": "UNAVAILABLE"}]
+    value["html_sources"] = [{"page": "SHOP", "source_url": SHOP, "html":
+        f'<html><head><link rel="canonical" href="{SHOP}"></head><body>'
+        '<div id="pcMainCompanyNameV2">Shenzhen supplier</div>'
+        '<div id="pcV2SellerTagYear">2 years of presence</div>'
+        '<div id="pcV2MainCateLabel">Digital, computer</div></body></html>'}]
+    result = normalize(value)
+    company = result["supplier_data"]["company_information"]
+    assert company["shop_company_name_display_text"] == "Shenzhen supplier"
+    assert company["shop_evidence_scope"] == "SHOP_HEADER_ONLY"
+    assert company["shop_header_claims_display_text"]["platform_tenure"] == "2 years of presence"
+    assert "shop_introduction_display_text" not in company
+    assert result["supplier_data"]["years_active"] is None
+    assert result["supplier_data"]["html_capture_status"][0]["content_scope"] == "SHOP_HEADER_ONLY"
+    return value
+
+
+def test_header_only_shop_is_parsed_without_inventing_introduction_or_registered_age():
+    header_only_shop_fixture()
+
+
+@pytest.mark.parametrize("change", ["missing_html", "name_mismatch", "no_name", "wrong_credit"])
+def test_header_only_shop_still_requires_matching_supplier_evidence(change):
+    value = header_only_shop_fixture()
+    if change == "missing_html": value.pop("html_sources")
+    if change == "name_mismatch": value["shop"]["company_name"] = "Different company"
+    if change == "no_name": value["html_sources"][0]["html"] = value["html_sources"][0]["html"].replace('id="pcMainCompanyNameV2"', 'id="unrelated"')
+    if change == "wrong_credit": value["shop"]["credit_url"] = "https://shopwrong123.1688.com/page/creditdetail.html"
+    with pytest.raises(ValueError): normalize(value)
