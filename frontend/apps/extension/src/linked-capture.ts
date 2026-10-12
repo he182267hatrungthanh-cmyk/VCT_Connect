@@ -82,7 +82,9 @@ export function captureLinkedDom(mode: "PRODUCT_LINK" | "SHOP" | "FACTORY" | "OP
   }
   if (mode === "PRODUCT_LINK") {
     if (expectedProduct && location.origin + location.pathname !== expectedProduct) throw new Error("Product changed during capture");
-    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("#shopNavigation a.shop-company-name[href]"))
+    // Header markup varies: the company class can be on a wrapper rather than
+    // the anchor. Stay inside the supplier navigation and require one identity.
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("#shopNavigation a[href]"))
       .filter(visible).map(a => shop(a.href)).filter(Boolean);
     return new Set(links).size === 1 ? links[0] : null;
   }
