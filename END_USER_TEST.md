@@ -251,3 +251,14 @@ Validation: 158 frontend tests, TypeScript, extension build, 31 selected-bundle/
 4. Confirm downloads and live report/source inspection, then reopen from history. Actual Chrome/Brave live supplier/session/download acceptance remains this operator check; offline fixtures and cloud saved-upload tests do not replace it.
 
 Release PR #31 merged as b4b5aeee70d0dcbc176a9ec03e6652b7a1ad3f27. 1,085 backend checks (32 skips), 158 frontend checks, TypeScript, production builds and credential scan passed. PR CI, main CI and Azure deployment run 38213244851 passed through migration 0017, activation and ingress/guest tests. Live collection preflight returned 204 for the fixed extension origin; unauthenticated begin was rejected with 401. A signed-in public-field saved HTML smoke produced full report 1f31f685-a71e-4a6b-b09a-be822b66f7c6 and reopened from cloud history with insufficient information and at most five items per list page. Proof: tmp/capture-production-report-proof.png. Previous extraction-only uploaded reports remain historical; submit fresh evidence to use the new reporting handoff.
+# Supplier evidence and risk-category linkage (2026-10-12)
+
+Create a **new analysis** after this release. Existing reports remain saved snapshots and are not recalculated by refreshing the page.
+
+1. Capture the product, save the visible shop HTML, and finish with factory HTML (or the available sources) through the existing extension flow.
+2. Open the new report and inspect **Rủi ro tập trung ở đâu?**. Supported categories should show numeric bars; missing/ambiguous categories should stay striped and marked **Chưa đủ bằng chứng**.
+3. Expand **Độ tin cậy & nguồn** under a supported category. Check the assessment reason and effective confidence, then follow its evidence link and expand the source card to view the verbatim quotes.
+4. Confirm that a report with insufficient category coverage still suppresses the overall risk number. A seller claim, company name, or positive rating alone must not establish verified identity or authentic reviews.
+5. Reopen the same report from history. Its scores and quotes should persist without another AI request. To compare later evidence, create another analysis rather than expecting the old report to change.
+
+The captured phone supplier replay supported product-quality and delivery concerns (55/100 each, with reduced confidence); the other five categories stayed unknown and overall coverage stayed 40%. These are recorded replay results, not promised scores for subsequent model runs.
