@@ -131,6 +131,28 @@ test('guided product capture pauses, survives popup closure and finishes company
   } finally { globalThis.fetch = original; }
 });
 
+test('named shop follows product, shop and factory capture under one reservation', async () => {
+  const original = globalThis.fetch;
+  try {
+    const h = setup();
+    const named = 'https://hztxsy.1688.com/';
+    const execute = chrome.scripting.executeScript;
+    chrome.scripting.executeScript = async options => JSON.parse(JSON.stringify(await execute(options)).replaceAll(shop, named));
+    const first = await h.send();
+    assert.ok(first.id);
+    assert.equal(h.stored.collectionJob.companyUrl, named);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_COMPANY');
+    h.tabs.set(2, { id: 2, url: named + '?offerId=778418840629', status: 'complete' });
+    assert.equal((await h.send('CONTINUE_GUIDED', 2)).id, first.id);
+    assert.equal(h.stored.collectionJob.stage, 'WAITING_FACTORY');
+    h.tabs.set(3, { id: 3, url: factory, status: 'complete' });
+    assert.equal((await h.send('CONTINUE_GUIDED', 3)).id, first.id);
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.requests[1].bundle.shop_url, named);
+    assert.deepEqual(h.requests[1].bundle.html_sources.map(item => item.page), ['PRODUCT', 'SHOP', 'FACTORY']);
+  } finally { globalThis.fetch = original; }
+});
+
 test('wrong supplier and login challenge remain retryable without another quota reservation', async () => {
   const original = globalThis.fetch;
   try {

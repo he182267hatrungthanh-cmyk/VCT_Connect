@@ -21,6 +21,10 @@ test("product shop discovery accepts wrapper markup but rejects ambiguous suppli
     assert.equal(captureLinkedDom("PRODUCT_LINK", OFFER_URL), shop);
     anchors.push(anchor("https://shopother123.1688.com/"));
     assert.equal(captureLinkedDom("PRODUCT_LINK", OFFER_URL), null);
+    anchors = [anchor("https://hztxsy.1688.com/?offerId=778418840629&td_page_id=PC-DEFAULT-2026")];
+    assert.equal(captureLinkedDom("PRODUCT_LINK", OFFER_URL), "https://hztxsy.1688.com/");
+    anchors = [anchor("https://detail.1688.com/"), anchor("https://sale.1688.com/"), anchor("https://hztxsy.1688.com.evil.test/")];
+    assert.equal(captureLinkedDom("PRODUCT_LINK", OFFER_URL), null);
     anchors = [];
     assert.equal(captureLinkedDom("PRODUCT_LINK", OFFER_URL), null);
   } finally {
