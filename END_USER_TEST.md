@@ -287,3 +287,13 @@ After the corresponding backend/frontend release, reload the live extension and 
 Offline validation used the saved factory's actual canonical URL, matching hztxsy shop backlink and eight supported source claims; sanitized factory HTML parsed. UI screenshots use the real components with a local test identity, not a native signed-in 1688 capture: `tmp/supplier-highlight-060-preview.png`, `tmp/vietnamese-factory-popup-060-preview.png`, `tmp/production-workspace-060-preview.png`.
 
 Release is live: PR #35 merged as `0eec5f74bf1a1fa08aaa3cd431c8eba805920e2d`; CI and deployment 38357424399 passed. Web --0000040/API --0000049 are ready and the worker uses the matching new backend image. Signed-in live workspace verified with an empty source field, Vietnamese file control/navigation and no demo badge or fake notification button. Live proof: `tmp/production-workspace-060-live.png`. Reload the unpacked live extension, confirm 0.6.0 and start a **fresh** product capture; earlier pending collections may have expired. ZIP: `tmp/vct-connect-live-extension-0.6.0.zip`.
+
+### Five-factor assessment and captured evidence — extension 0.6.1
+
+1. Reload the unpacked live extension in Chrome/Brave and confirm **0.6.1**. Select **VI**, capture a product and save its shop HTML. Factory next-step guidance should remain Vietnamese when marketplace translation is enabled.
+2. Capture the matching factory and finish. A new report should list five categories: product quality, supplier identity, review authenticity, after-sales, and pricing. Delivery and communication should not contribute to scoring or coverage.
+3. Check the captured review sample separately from the platform total. For the inspected umbrella report, the sample contains 10 reviews and the source displays `4.8 6000+条评价`; do not treat 6000+ as an exact total or proof of review authenticity.
+4. Follow the pricing source link and check the displayed prices, MOQ and offer conditions against the source. Available data with an inconclusive assessment must say **Đã có dữ liệu · chưa thể kết luận**, with the reason and source links, rather than imply no pricing data was captured.
+5. Reopen a historical report. Removed dimensions are hidden, while its saved overall score and coverage remain unchanged with a legacy-model notice. Create a new analysis for scoring version **v0.2.0**; refreshing cannot rerun the model.
+
+Read-only live inspection of report `9478c7c2-c2cb-47de-8b8f-9b7d2e536a84` verified 10 reviews, displayed 6000+ reviews, two prices (3.60 and 23.80), and MOQ one. These values are public source claims, not independent verification. This inspection did not change the report or run the provider. Native extension guidance remains an operator acceptance check.
