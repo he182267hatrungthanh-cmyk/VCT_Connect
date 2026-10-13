@@ -274,3 +274,14 @@ Reload the unpacked live extension from `frontend/apps/extension/build-live` on 
 Product `778418840629` links to `https://hztxsy.1688.com/`, a named shop rather than a `shop…` hostname. Version **0.5.3** recognizes named shop hosts; backend validation must be released alongside it. After that release, reload the same live extension folder, reopen the umbrella product and choose **Analyze this page**. Expect the shop prompt linking to hztxsy, then **Save shop HTML**, and the factory capture prompt after saving the shop. Factory evidence still requires a matching shop backlink. Service hosts, foreign domains, credentials and ports remain rejected. A missing/ambiguous supplier link does not silently submit product-only evidence.
 
 Backend release is now live: PR #34, merge `1d5be9d2eb5ba0c44ecb0c45d1681fda83bce86a`, deployment 38293554504 passed including worker activation and live ingress/guest checks. API --0000048 and web --0000039 are ready. Reload `frontend/apps/extension/build-live` (confirm 0.5.3); shareable ZIP: `tmp/vct-connect-live-extension-0.5.3.zip`. Saved-product inspection and named three-source normalization passed; native Chrome/Brave acceptance remains the operator retest above.
+
+### Supplier cue, named factory and Vietnamese interface — extension 0.6.0
+
+After the corresponding backend/frontend release, reload the live extension and confirm **0.6.0**. Vietnamese is the default; **VI / EN** switches the extension language and remembers your choice.
+
+1. Analyze umbrella product `778418840629`. Expect a green inset highlight directly on **Hangzhou xing umbrella co., ltd**, with Vietnamese next-step guidance. Dismiss guidance to restore the page's original styling.
+2. Save the linked shop, then open `https://sale.1688.com/factory/card.html?memberId=hztxsy&facMemId=hztxsy`. Expect **Trang được hỗ trợ · Nhà máy** and **Lưu HTML nhà máy và phân tích**. Verify factory HTML downloads and the same report receives the factory evidence.
+3. Reopen the extension to check that the language preference and pending collection survive. A mismatched factory or shop must remain blocked.
+4. On the live web app, expect **Không gian làm việc**, **Theo dõi**, an empty URL field and **Chọn tệp HTML**. Demo data stays labeled when deliberately used, but it is no longer the default analysis.
+
+Offline validation used the saved factory's actual canonical URL, matching hztxsy shop backlink and eight supported source claims; sanitized factory HTML parsed. UI screenshots use the real components with a local test identity, not a native signed-in 1688 capture: `tmp/supplier-highlight-060-preview.png`, `tmp/vietnamese-factory-popup-060-preview.png`, `tmp/production-workspace-060-preview.png`.
