@@ -299,3 +299,16 @@ Release is live: PR #35 merged as `0eec5f74bf1a1fa08aaa3cd431c8eba805920e2d`; CI
 Read-only live inspection of report `9478c7c2-c2cb-47de-8b8f-9b7d2e536a84` verified 10 reviews, displayed 6000+ reviews, two prices (3.60 and 23.80), and MOQ one. These values are public source claims, not independent verification. This inspection did not change the report or run the provider. Native extension guidance remains an operator acceptance check.
 
 Release is live: PR #36 merged as `f1afa405687ffcd08714e436a75be63d28e1e1d7`; PR CI 38377113260, main CI 38379529393 and Azure deployment 38380541734 passed. Web --0000041/API --0000050 are healthy and active; the worker uses the matching backend image. Served web bundles contain the captured-data label, separate platform total and five-category notice. Deployed prompt-v4 replay of the exact umbrella snapshot produced a pricing input of 25/100 at 70% confidence, with no report/database writes; subsequent model runs can differ. Reload `frontend/apps/extension/build-live`, confirm **0.6.1**, and create a fresh analysis. ZIP: `tmp/vct-connect-live-extension-0.6.1.zip`. Native 1688 translation/capture acceptance remains the five-step operator check above.
+
+
+### Preliminary public-review and after-sales assessment — scoring v0.2.1
+
+Create a fresh analysis after release. A sample of at least ten usable reviews with no detected suspicious patterns now supports a preliminary credibility score of 35/100. Confidence is capped at 60%, reduced to 45% without complete timestamps and 40% without complete ratings. Suspicious patterns take precedence; fewer than ten reviews do not get this clean-sample fallback. This checks the accessible sample and does not authenticate all platform reviews.
+
+After-sales may use relevant refund/return policies, correctly labeled service metrics and buyer feedback, with at most 60% confidence. A single specific unresolved refund/support allegation can support a concern at at most 40%; one positive review, generic product praise or absence of complaints cannot establish good after-sales. With no relevant evidence the category stays unknown.
+
+1. Capture product/shop/factory and create a new report; confirm scoring v0.2.1 and the visible preliminary-assessment disclosure.
+2. Inspect review credibility and follow the source link for the sampled-review check and missing metadata. Repeated text should produce the suspicious-pattern assessment rather than the clean-sample score.
+3. Inspect after-sales rationale and source quotes. Confirm it describes actual policy, return/refund feedback or a specifically labeled metric.
+4. Check that sparse evidence still leaves unsupported categories and potentially the overall score unknown.
+5. Reopen a historical report: its saved scores should not change. The extension remains version 0.6.1 because this update changes server scoring and the web report.
