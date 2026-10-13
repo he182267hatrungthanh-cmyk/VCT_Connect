@@ -336,3 +336,12 @@ The server now selects bounded text from identity-checked, sanitized product/sho
 
 
 Live release verified2026-10-14: PR39 merged as a8b92a3750ec378235e9cfebaedbc600c171ebbc. PR CI38445699191, main CI38447225394 and Azure deployment38448680206 passed (1,139 backend checks/32 skips;169 frontend;78 sandbox browser;12 PostgreSQL browser). API revision52/web revision43 Healthy/Running/active; Event worker matches new backend image. Served web bundle confirms context source cards and truncation disclosure. Proof: tmp/page-context-live-release.json and tmp/page-context-web-bundle-check.json. Supplier promptv6/pipelinev0.5 is deployed; extension0.6.1 remains compatible. Fresh product→shop→factory HTML capture is required; old reports/snapshots are not retroactively enriched. Context policy recovery and exact-source quote rules verified through eleven targeted tests, including short Chinese policies and complete label/value groups. Native marketplace capture and actual model interpretation of newly captured context remain operator acceptance; no stored-data external replay was performed for this feature.
+
+
+## Context and factory checks — extension 0.6.2
+
+1. Reload the live unpacked extension in chrome://extensions and confirm the VCT logo appears. Sign in on the live VCT site in the same browser profile.
+2. Open a supported product, load its review drawer, and select Phân tích trang này. Follow the supplier cue, save shop HTML, open the factory profile, then save factory HTML and analyze.
+3. Verify Downloads/VCT Connect/<analysis ID> contains product.html, shop.html and factory.html. The result should retain the same source identity throughout.
+4. In the new report, inspect product quality, pricing and after-sales source quotes. Published refund/compensation protections should be described as advertised policies with limited confidence, rather than verified future service. Generic platform price definitions must not become observed hidden-charge evidence.
+5. Open Thông tin đã được xem xét in the factory card. Company area and employee ranges must preserve their original meaning. Weak or absent manufacturing evidence should display uncertainty without default probability bars. Older saved reports retain their original assessment; start a new collection to test the new calculation.
