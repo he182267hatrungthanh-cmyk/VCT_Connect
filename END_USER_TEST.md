@@ -312,3 +312,8 @@ After-sales may use relevant refund/return policies, correctly labeled service m
 3. Inspect after-sales rationale and source quotes. Confirm it describes actual policy, return/refund feedback or a specifically labeled metric.
 4. Check that sparse evidence still leaves unsupported categories and potentially the overall score unknown.
 5. Reopen a historical report: its saved scores should not change. The extension remains version 0.6.1 because this update changes server scoring and the web report.
+
+
+Release verified live: scoring v0.2.1 / supplier prompt v5. PR #37 merge 01f3b73aadf2ec459b224a78396890c1289900e6 and disclosure PR #38 merge 1e33b5bb126f15bdc516d446ba238d72d1e01bbd passed CI. Final deployment 38406642639 succeeded with healthy API revision51 and web revision42; worker image matches API and Event processing is enabled. Served web code includes the preliminary-assessment notice. CI verified 1,128 backend tests (32 skips), 168 frontend tests and browser/PostgreSQL checks. The first deployment failed before resource convergence with an empty Azure response; final rollout recovered and passed health/guest smoke checks. Extension remains 0.6.1. Create a fresh analysis to use the new policy.
+
+Exact private saved-snapshot LLM replay has not been run: automatic approval review requires explicit permission to send that stored supplier/review payload to YEScale. This does not limit completed code/CI/live-bundle verification. Normal user-initiated analyses use the deployed policy; native marketplace capture and the sample's actual after-sales result remain operator acceptance.
