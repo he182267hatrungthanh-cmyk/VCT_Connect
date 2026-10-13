@@ -322,3 +322,14 @@ Exact private saved-snapshot LLM replay has not been run: automatic approval rev
 ### Approved deployed-model verification replay — 2026-10-14
 
 User explicitly approved the saved supplier/review payload to YEScale. Initial execution2y07j0q failed on a provider read timeout. Bounded diagnostic retrydvkc0sk completed successfully using supplier promptv5 and scoringv0.2.1; the response timeout was120 seconds for this diagnostic only. Result: review credibility35/100 at40% effective confidence, product quality25/100 at49.5%, pricing25/100 at60%; supplier identity and after-sales remained unknown. After-sales interpretation cited no clear supporting policy evidence and did not generate a score. Preliminary aggregate27.4615/100, labelLOW, confidence82.92%, dimension coverage62.5%. Aggregate confidence is the composite scoring metric and does not replace the individual category confidence caps; unassessed identity/after-sales remain gaps. No saved report/database writes. This validates the new sample policy on the exact user-named snapshot, without claiming complete supplier verification. Proof: tmp/sample-risk-approved-replay-result.json. Existing saved report9478c7c2 stays unchanged; a fresh analysis uses the deployed policy, and subsequent model outputs may differ.
+
+
+### Cleaned HTML context alongside structured evidence — supplier prompt v6
+
+The server now selects bounded text from identity-checked, sanitized product/shop/factory HTML already uploaded by the extension. Structured fields remain the primary model input. Supplemental context prioritizes policies, terms and labeled claims, retains section IDs/source URLs/HTML hashes, and is capped at24 sections/12KB (shrunk further when required by the model input budget). Extra text does not increase the12-field extraction completeness or review sample count. No page scripts execute and no additional source pages/assets are fetched.
+
+1. Create a fresh product→shop→factory capture with extension0.6.1; HTML must actually be captured/uploaded to provide supplemental context.
+2. Open **Nguồn và bằng chứng → Ngữ cảnh trang đã thu thập**. Inspect readable excerpts, headings and exact product/shop/factory source links; additional excerpts are paged five at a time.
+3. When pricing or after-sales uses context, inspect its model-evidence card for the exact quote and linked original section. A metadata-only or fabricated quote must never produce a score; ambiguous return-rate/generic-service signals remain restricted.
+4. Confirm the report discloses bounded/possibly truncated context. Content outside captured public sections, hidden behind unavailable pages, or beyond budgets remains unavailable; absence from context is not proof a policy does not exist.
+5. Reopen from history. Context and cited evidence remain tied to the snapshot; old reports are not retroactively enriched. A fresh capture is required to use promptv6/pipelinev0.5.
