@@ -1,0 +1,68 @@
+(function (d) {
+  var selectors = [
+    { selector: '.ap-ext-1688', target: 'aliprice', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_aliprice' },
+    { selector: '#zzb_rightSoutuBtn2', target: 'zzb', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_zzb' },
+    { selector: '.hsq-tooltip__trigger', target: 'hsq', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_hsq' },
+    { selector: '#Offer', target: 'dts', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_dts' },
+    { selector: '#Offer_dts', target: 'dts', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_dts' },
+    { selector: '[id="1688-extension-entry"]', target: 'haobangshou', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_haobangshou' },
+    { selector: '[id="market-mate-for-1688"]', target: 'haobangshou', log: '/WORK_Ying_Xiao.1688_smart_assistant.install_haobangshou' }
+];
+
+function slog(selectorConfig) {
+    console.warn('success:', selectorConfig);
+    window.goldlog && window.goldlog.record(
+        selectorConfig.log,
+        'EXP',
+         '',
+        'GET',
+    );
+}
+
+function precheck() {
+  return selectors.filter((selectorConfig) => {
+    var injected = document.querySelector(selectorConfig.selector);
+    if (injected) {
+        slog(selectorConfig);
+    }
+    return !injected;
+  });
+}
+
+var b = document.querySelector("\u0023\u0061\u0070\u002d\u0063\u0075\u0073\u0074\u006f\u006d\u002d\u0073\u0074\u0079\u006c\u0065");
+if(b){
+  b.remove();
+}
+
+selectors = precheck();
+
+function cb(mutations) {
+    mutations.forEach(mutation => {
+        if (mutation.addedNodes.length) {
+            mutation.addedNodes.forEach(addedNode => {
+                if (addedNode.nodeType === Node.ELEMENT_NODE) {
+                    selectors.some((selectorConfig) => {
+                        if (addedNode.matches(selectorConfig.selector)) {
+                            slog(selectorConfig);
+                        }
+                    });
+                    if(addedNode.matches("\u0023\u0061\u0070\u002d\u0063\u0075\u0073\u0074\u006f\u006d\u002d\u0073\u0074\u0079\u006c\u0065")){
+                      addedNode.remove();
+                    }
+                }
+            });
+        }
+    });
+}
+
+  var __observer__ = new MutationObserver(cb);
+  try {
+    __observer__.observe(d, { childList: true, subtree: true });
+  } catch (error) {
+    console.warn(error);
+  }
+
+  setTimeout(() => {
+    __observer__.disconnect();
+  }, 60000);
+})(document);

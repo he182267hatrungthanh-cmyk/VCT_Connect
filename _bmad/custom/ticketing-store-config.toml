@@ -1,0 +1,27 @@
+description = "Project-local, file-based BMAD ticket store."
+
+[tickets]
+store = "repo"
+root = "{output_folder}"
+access = "Read and write ticket files under root."
+fields = "Risk lives in frontmatter. Status and assignee live in a leaf plan."
+reference = "A reference is a line in References: type - project-relative path, section."
+
+[tickets.types]
+initiative = "initiative"
+epic = "epic"
+story = "story"
+spike = "spike"
+bug = "bug"
+
+[tickets.status]
+backlog = "backlog"
+in-progress = "in-progress"
+review = "review"
+done = "done"
+dropped = "dropped"
+
+[verbs]
+setup = "Use the project-local output folder as the ticket root."
+write = "Edit the local ticket tree. Commit only current work when a Git repository exists."
+query = "Use tickets.py find and status to read the local ticket tree."

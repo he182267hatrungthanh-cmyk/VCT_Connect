@@ -12,3 +12,6 @@ frontend/apps/extension/build/
 *.tsbuildinfo
 frontend/apps/extension/build-live/
 frontend/apps/web/private/
+tmp/
+.uv-wheelhouse/
+frontend/apps/extension/build-local/

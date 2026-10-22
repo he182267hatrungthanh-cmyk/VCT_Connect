@@ -1,0 +1,37 @@
+{
+  "generation_hash": "e1ac2252d545a0b45cdc",
+  "inputs": {
+    "jinja2_version": "3.1.6",
+    "project_root": "C:\\Users\\eidel\\Desktop\\VCT Connect",
+    "renderer_sha256": "2c6fe593bfce1deb4783f1138b10b8c628cfa324a4688c9bf1d63ab57f8bc466",
+    "resolved_values": {
+      "config.modules.bmm.planning_artifacts": "C:/Users/eidel/Desktop/VCT Connect/_bmad-output/planning-artifacts",
+      "customization.workflow.activation_steps_append": [],
+      "customization.workflow.activation_steps_prepend": [],
+      "customization.workflow.on_complete": "",
+      "customization.workflow.persistent_facts": []
+    },
+    "skill_root": "C:\\Users\\eidel\\Desktop\\VCT Connect\\.agents\\skills\\bmad-retrospective",
+    "source_sha256": {
+      "references/acceptance-verdict.md": "3d589d204d0040c10e4bbfab3e446fb0e41163598c8edebeeceeb184a9bcd3f1",
+      "references/aggregate-views.md": "985733daf701b0d3508764d428033128a7ea48fadea493e00a59a1b17d88fd34",
+      "references/evidence-gathering.md": "e3ecb1556fd203acedafabb0a33007b4a846adccf5eac80ca3b14eb826b46fd0",
+      "references/retro-document.md": "41d2fc84c1739791816a1908a40fa5393fe3ab3d74890067bc4151130b651e66",
+      "references/team-discussion.md": "dec27941b7a5056b2bdd5d160d9769806aa95e2ed3452234fbf3bf47b0831d7d",
+      "workflow.md": "bfa437f774ad1ed68566906e8e60fa0cc3afa2c4527007e7bbb87e0f8f850f05"
+    }
+  },
+  "outputs": {
+    "references/acceptance-verdict.md": "3d589d204d0040c10e4bbfab3e446fb0e41163598c8edebeeceeb184a9bcd3f1",
+    "references/aggregate-views.md": "6f5fe411fcafa8bdebf5bc7c33270671b47b0f2d43007a67d4ac21a8c077b7d7",
+    "references/evidence-gathering.md": "56648fa9829dbbebd5d63153fb19076c1f1feb58ef7a6cbffe30fc7a3cc237d4",
+    "references/retro-document.md": "a25f422c1def2b9a97212622fea9c26a69f7dd9a1b112b6070ee6aabd48e8b0b",
+    "references/team-discussion.md": "dec27941b7a5056b2bdd5d160d9769806aa95e2ed3452234fbf3bf47b0831d7d",
+    "workflow.md": "8420c513dd5d0aae5962e880196fb8e68250c84183e6efce4ff790d9fcc1a76d"
+  },
+  "project_root": "C:\\Users\\eidel\\Desktop\\VCT Connect",
+  "project_slug": "vct-connect",
+  "root_hash": "ed5eaeebe2cd",
+  "schema_version": 1,
+  "skill": "bmad-retrospective"
+}

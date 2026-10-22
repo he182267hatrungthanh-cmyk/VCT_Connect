@@ -1,0 +1,57 @@
+{
+  "generation_hash": "cfa06bf4eaf46930a71a",
+  "inputs": {
+    "jinja2_version": "3.1.6",
+    "project_root": "C:\\Users\\eidel\\Desktop\\VCT Connect",
+    "renderer_sha256": "2c6fe593bfce1deb4783f1138b10b8c628cfa324a4688c9bf1d63ab57f8bc466",
+    "resolved_values": {
+      "config.modules.bmm.implementation_artifacts": "C:/Users/eidel/Desktop/VCT Connect/_bmad-output/implementation-artifacts",
+      "config.modules.bmm.planning_artifacts": "C:/Users/eidel/Desktop/VCT Connect/_bmad-output/planning-artifacts",
+      "customization.workflow.activation_steps_append": [],
+      "customization.workflow.activation_steps_prepend": [],
+      "customization.workflow.on_complete": "",
+      "customization.workflow.open_plan": "",
+      "customization.workflow.persistent_facts": [],
+      "customization.workflow.quick_lenses": [
+        {
+          "id": "quick",
+          "instruction": "Launch a context-free subagent with this prompt:\n\nRead `{plan_file}` — the plan holding the acceptance criteria and intent — and the files its frontmatter `context:` lists. Read the agent instruction files (`AGENTS.md`, `CLAUDE.md`, or equivalents) at the repository root and in the directories the diff touches; those are the rules. Then read the unified diff at `{diff_file}` — it is the change under review.\n\nReport unmet acceptance criteria, broken rules, and bugs. Each finding: the location, what goes wrong, and evidence checked against the surrounding code. Output a Markdown list of findings only — no severity, priority, or ranking.\n\nDo not invoke any skill, and do not spawn subagents of your own — you are the reviewer. Return your findings as text in your final message; do not route them through any findings-reporting tool the host may offer.\n\n",
+          "name": "Quick"
+        }
+      ],
+      "customization.workflow.review": "quick",
+      "customization.workflow.route": "oneshot"
+    },
+    "skill_root": "C:\\Users\\eidel\\Desktop\\VCT Connect\\.agents\\skills\\bmad-build",
+    "source_sha256": {
+      "plan-template.md": "e23e478344054c1f86f08f467df623f4db2a8c4fdf0e5f7be1738dde550fe33e",
+      "references/claims-check.md": "6cb20a86d819b95272876bca0dffef59ca07ba6a373d804295066751043867c0",
+      "references/deletion-check.md": "0f1f124e4e957147e89164a272b10bedc694ad0d9ad2618c8610ac74ee9cb0da",
+      "review-prompts/edge-case-hunter.md": "b909fe0ec8e4daaf2550d0ec783618c5146261d0dbc0e054698ce00d0905a3d1",
+      "review-prompts/verification-gap.md": "45ab0b8c4c56c5c055c97a293a8591a67e256d0b1a2058ce1f093cd866be8d03",
+      "step-01-clarify-and-route.md": "ccd25dc894c24bc25f3b8e317c7afa88eeedb12ed18c940f3f6ea034c6a95691",
+      "step-02-plan.md": "e13e215a0ef8f3181f8881beb2f6079a0d9de9a6242c0a665cc34f431231cb9b",
+      "step-03-implement.md": "aa285ac97fdaa6e66f273edf5363c98ddf0252bf965d51a9a336d194aeafdad1",
+      "step-04-review.md": "ca8cfc9944ae504d248bc48d561a96c2a45dad851cdd8fc2cf18719c7a599338",
+      "step-05-present.md": "8c3a4f5e627524b05c3f1db4850b6ab68ae6930d8046c340a3e1590dccc4ed61",
+      "step-oneshot.md": "9d16a2b08a3c3a427a6d30356ef6f8577e023b9a0e2f9ad3d78bfccb7271537a",
+      "workflow.md": "0e9c7fb386d6d32f3f70701ba011ba99a1ed43e891fc7c23876a9d37af132ed8"
+    }
+  },
+  "outputs": {
+    "plan-template.md": "e23e478344054c1f86f08f467df623f4db2a8c4fdf0e5f7be1738dde550fe33e",
+    "references/claims-check.md": "6cb20a86d819b95272876bca0dffef59ca07ba6a373d804295066751043867c0",
+    "references/deletion-check.md": "0f1f124e4e957147e89164a272b10bedc694ad0d9ad2618c8610ac74ee9cb0da",
+    "review-prompts/edge-case-hunter.md": "b909fe0ec8e4daaf2550d0ec783618c5146261d0dbc0e054698ce00d0905a3d1",
+    "review-prompts/verification-gap.md": "45ab0b8c4c56c5c055c97a293a8591a67e256d0b1a2058ce1f093cd866be8d03",
+    "step-01-clarify-and-route.md": "12a7ad7a9ab8e76a52bc8a967f5e71981e541d5e721471f977617238fd57641c",
+    "step-02-plan.md": "a6b3d702cfdf4a752e806c161522687d59a358ccbc948b3d1d2584fa2a96d18d",
+    "step-oneshot.md": "1da84fa42a60a0c4faa98920f8b12a7dcf786c5a59d825d3915dfe54b5c135aa",
+    "workflow.md": "5514acc115930df8065cf391c49a8ed7e39175957d703e72794d9d636bbf5c25"
+  },
+  "project_root": "C:\\Users\\eidel\\Desktop\\VCT Connect",
+  "project_slug": "vct-connect",
+  "root_hash": "ed5eaeebe2cd",
+  "schema_version": 1,
+  "skill": "bmad-build"
+}

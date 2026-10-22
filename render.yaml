@@ -1,0 +1,32 @@
+version: "1"
+
+services:
+  - type: web
+    name: vct-connect
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: QUEUE_TRANSPORT
+        value: local
+      - key: DEVELOPER_MODE
+        value: "true"
+      - key: API_RUNTIME
+        value: local
+      - key: API_INTERNAL_ORIGIN
+        value: http://127.0.0.1:8000
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_AUTHORIZED_PARTIES
+        sync: false
+      - key: YESCALE_API_KEY
+        sync: false
+
