@@ -3,7 +3,22 @@ import { resolve } from "node:path";
 import { proxyBackend } from "../../_backend";
 
 const headers = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
-export function extensionDownload(readArchive: () => Promise<Uint8Array> = () => readFile(resolve(process.cwd(), "private/vct-connect-extension.zip"))) {
+async function readDefaultArchive(): Promise<Uint8Array> {
+  const candidates = [
+    resolve(process.cwd(), "private/vct-connect-extension.zip"),
+    resolve(process.cwd(), "apps/web/private/vct-connect-extension.zip"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      return await readFile(candidate);
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error("Extension archive not found");
+}
+
+export function extensionDownload(readArchive: () => Promise<Uint8Array> = readDefaultArchive) {
   return async (request: Request): Promise<Response> => {
     if (!/^Bearer\s+\S+$/i.test(request.headers.get("authorization") ?? "")) {
       return Response.json({ detail: "Sign in to download the extension." }, { status: 401, headers });

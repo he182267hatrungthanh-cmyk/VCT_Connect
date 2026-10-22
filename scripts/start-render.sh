@@ -81,6 +81,9 @@ cd /app/frontend
 mkdir -p /app/frontend/public
 cp -rn /app/frontend/apps/web/public/* /app/frontend/public/ 2>/dev/null || true
 
+mkdir -p /app/frontend/private
+cp -rn /app/frontend/apps/web/private/* /app/frontend/private/ 2>/dev/null || true
+
 node apps/web/server.js &
 FRONTEND_PID=$!
 

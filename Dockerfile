@@ -68,6 +68,7 @@ COPY --from=frontend-builder --chown=vct:vct /app/apps/web/.next/standalone /app
 COPY --from=frontend-builder --chown=vct:vct /app/apps/web/.next/static /app/frontend/apps/web/.next/static
 COPY --from=frontend-builder --chown=vct:vct /app/apps/web/public /app/frontend/apps/web/public
 COPY --from=frontend-builder --chown=vct:vct /app/apps/web/private/vct-connect-extension.zip /app/frontend/apps/web/private/vct-connect-extension.zip
+COPY --from=frontend-builder --chown=vct:vct /app/apps/web/private/vct-connect-extension.zip /app/frontend/private/vct-connect-extension.zip
 
 # 6. Copy and configure startup script
 COPY --chown=vct:vct scripts/start-render.sh /app/start.sh
