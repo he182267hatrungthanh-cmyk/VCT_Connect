@@ -34,6 +34,7 @@ class Settings:
     admission_window_seconds: int = 86400
     public_browser_fallback: bool = False
     yescale_api_key: str | None = None
+    yescale_base_url: str = "https://api.yescale.io/v1"
     yescale_model: str = "gpt-4o-mini"
     yescale_embedding_model: str | None = None
 
@@ -105,6 +106,7 @@ class Settings:
             admission_window_seconds=_bounded_int("ADMISSION_WINDOW_SECONDS", 86400, 60, 31536000),
             public_browser_fallback=os.getenv("PUBLIC_BROWSER_FALLBACK", "false").lower() == "true",
             yescale_api_key=os.getenv("YESCALE_API_KEY"),
+            yescale_base_url=os.getenv("YESCALE_BASE_URL", "https://api.yescale.io/v1").rstrip("/"),
             yescale_model=os.getenv("YESCALE_MODEL", "gpt-4o-mini"),
             yescale_embedding_model=os.getenv("YESCALE_EMBEDDING_MODEL") or None,
         )

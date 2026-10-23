@@ -25,11 +25,19 @@ MediaLoader = Callable[
 ]
 
 
+import logging
+
+from .mock_provider import SmartMockProvider
+
+log = logging.getLogger("worker.assessment")
+
+
 def assessment_enabled(
     settings: Settings | None,
     assess: AssessmentCallable | None,
 ) -> bool:
-    return assess is not None or bool(settings and settings.yescale_api_key)
+    # Always enabled in hybrid mode so worker can assess with real AI or smart mock
+    return True
 
 
 def run_worker_assessment(
@@ -58,25 +66,52 @@ def run_worker_assessment(
             else assess(supplier_data)
         )
     else:
-        if settings is None or not settings.yescale_api_key:
-            raise ValueError("YESCALE_API_KEY is required for worker assessment")
-        with YEScaleProvider(settings.yescale_api_key) as provider:
+        bundle = None
+        # 1. Attempt real AI provider if API key is present
+        if settings and settings.yescale_api_key and settings.yescale_api_key.strip():
+            try:
+                base_url = getattr(settings, "yescale_base_url", "https://api.yescale.io/v1")
+                with YEScaleProvider(settings.yescale_api_key.strip(), base_url=base_url) as provider:
+                    bundle = build_assessment(
+                        supplier_data,
+                        provider=provider,
+                        model=settings.yescale_model,
+                        embedding_provider=(
+                            provider if settings.yescale_embedding_model else None
+                        ),
+                        embedding_model=settings.yescale_embedding_model,
+                        media=permitted_media,
+                        multimodal_provider=provider if permitted_media else None,
+                        multimodal_model=(
+                            settings.yescale_model if permitted_media else None
+                        ),
+                        metadata={
+                            "feature": "complete_assessment",
+                            "session_id": str(claim["analysis_id"]),
+                        },
+                    )
+            except Exception as exc:
+                log.warning(
+                    "Real AI assessment failed analysis_id=%s (%s); falling back to SmartMockProvider",
+                    claim["analysis_id"],
+                    exc,
+                )
+                bundle = None
+
+        # 2. Hybrid fallback: Smart Mock Provider (0 VND, deterministic & never crashes)
+        if bundle is None:
+            mock_provider = SmartMockProvider(supplier_data)
             bundle = build_assessment(
                 supplier_data,
-                provider=provider,
-                model=settings.yescale_model,
-                embedding_provider=(
-                    provider if settings.yescale_embedding_model else None
-                ),
-                embedding_model=settings.yescale_embedding_model,
+                provider=mock_provider,
+                model="smart-mock-v1",
+                embedding_provider=None,
+                embedding_model=None,
                 media=permitted_media,
-                multimodal_provider=provider if permitted_media else None,
-                multimodal_model=(
-                    settings.yescale_model if permitted_media else None
-                ),
                 metadata={
                     "feature": "complete_assessment",
                     "session_id": str(claim["analysis_id"]),
+                    "mode": "smart_mock_hybrid",
                 },
             )
 
