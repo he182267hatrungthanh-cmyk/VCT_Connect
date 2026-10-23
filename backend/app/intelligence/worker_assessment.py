@@ -95,6 +95,7 @@ def run_worker_assessment(
                     "Real AI assessment failed analysis_id=%s (%s); falling back to SmartMockProvider",
                     claim["analysis_id"],
                     exc,
+                    exc_info=True,
                 )
                 bundle = None
 

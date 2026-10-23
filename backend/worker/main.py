@@ -155,11 +155,12 @@ def process_local_once(
             retry_delay_seconds=min(2 ** claim["attempt"], 60),
             local_claim_token=local_claim["claim_token"],
         )
-        log.warning(
-            "Local processing failed analysis_id=%s code=%s outcome=%s",
+        log.exception(
+            "Local processing failed analysis_id=%s code=%s outcome=%s error=%s",
             analysis_id,
             code,
             "final" if final else "retry",
+            exc,
         )
     return True
 
@@ -324,11 +325,12 @@ def process_azure_once(
                         max_attempts=max_attempts,
                         retry_delay_seconds=min(2 ** claim["attempt"], 60),
                     )
-                    log.warning(
-                        "Azure processing failed analysis_id=%s code=%s outcome=%s",
+                    log.exception(
+                        "Azure processing failed analysis_id=%s code=%s outcome=%s error=%s",
                         analysis_id,
                         code,
                         "final" if final else "retry",
+                        exc,
                     )
                     if final:
                         if clock() >= settle_deadline:
