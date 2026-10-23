@@ -20,7 +20,14 @@ export function alibabaPage(value: string): { source: string; shop?: string; kin
 // Chrome serializes this function. Read rendered public regions only; no page globals.
 export function captureAlibabaDom(mode: "PRODUCT" | "PRODUCT_LINK" | "SHOP" | "FACTORY", expected?: string): LegacyCapture | string | ShopSelection | FactorySelection | null {
   function visible(n: HTMLElement): boolean {
-    if (!n.getClientRects().length || n.closest('script,style,template,noscript,[hidden],[aria-hidden="true"]')) return false;
+    if (!n.getClientRects().length || n.closest('script,style,template,noscript,[hidden]')) return false;
+    const aria = n.closest('[aria-hidden="true"]');
+    if (aria) {
+      const hasDialog = Boolean(document.querySelector('[role="dialog"],.next-dialog,.next-overlay-wrapper,.next-dialog-body'));
+      const isPageWrapper = aria.id === "root" || aria.tagName === "BODY" || aria.tagName === "MAIN" ||
+        (hasDialog && !n.hasAttribute("aria-hidden") && !aria.matches("span,td,tr,dl,dt,dd,p,a,button,label,li"));
+      if (!isPageWrapper) return false;
+    }
     for (let p: HTMLElement | null = n; p; p = p.parentElement) {
       const s = getComputedStyle(p);
       if (s.display === "none" || s.visibility !== "visible" || s.opacity === "0") return false;
@@ -149,10 +156,16 @@ export function captureAlibabaDom(mode: "PRODUCT" | "PRODUCT_LINK" | "SHOP" | "F
       if (parts.length === 2 && attrs.length < 50) attrs.push({ name: parts[0]!, value: parts[1]! });
     }
     if (attrs.length) fields.product_attributes = attrs;
-    const reviews = Array.from(document.querySelectorAll<HTMLElement>('.product-review .product-review-list div.r-relative.r-whitespace-normal')).filter(visible);
-    fields.reviews = reviews.slice(0, 20).map(n => { const body = text(n, 100_000) || ""; return { text: Array.from(body).slice(0, 2000).join(""), original_length: Array.from(body).length }; }).filter(r => r.text);
-    const summary = text(document.querySelector<HTMLElement>(".product-review"), 180) || "";
-    const rating = /^([0-5](?:\.[0-9]+)?)\b/.exec(summary), count = /Based on ([0-9,]+) reviews/i.exec(summary);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"],.next-dialog,.next-overlay-wrapper');
+    const dialogReviews = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('.r-relative.r-whitespace-normal, [class*="review-item"], [class*="reviewItem"], .product-review-list div.r-relative')).filter(visible) : [];
+    const inlineReviews = Array.from(document.querySelectorAll<HTMLElement>('.product-review .product-review-list div.r-relative.r-whitespace-normal, .product-review .product-review-list div.r-relative, .product-review [class*="review-item"]')).filter(visible);
+    const candidateReviews = dialogReviews.length > 0 ? dialogReviews : inlineReviews;
+    fields.reviews = candidateReviews.slice(0, 40).map(n => {
+      const body = text(n, 100_000) || "";
+      return { text: Array.from(body).slice(0, 2000).join(""), original_length: Array.from(body).length };
+    }).filter(r => r.text && r.text.length > 5);
+    const summary = text(document.querySelector<HTMLElement>(".product-review, [role=\"dialog\"], .next-dialog"), 180) || "";
+    const rating = /^([0-5](?:\.[0-9]+)?)\b/.exec(summary), count = /(?:Based on|Dựa trên)?\s*([0-9,]+)\s*(?:reviews|đánh giá)/i.exec(summary);
     if (rating) fields.rating = Number(rating[1]);
     if (count) fields.review_count = Number(count[1].replace(/,/g, ""));
     const result = { source_url: source, offer_id: id, fields };
@@ -199,7 +212,14 @@ export function captureAlibabaHtml(page: HtmlSource["page"], expected: string, s
         (own ? !m || `https://${m[1]}.en.alibaba.com/` !== own : hint.origin + hint.pathname !== expected)) return null;
   }
   function visible(n: HTMLElement): boolean {
-    if (!n.getClientRects().length || n.closest('script,style,template,noscript,[hidden],[aria-hidden="true"]')) return false;
+    if (!n.getClientRects().length || n.closest('script,style,template,noscript,[hidden]')) return false;
+    const aria = n.closest('[aria-hidden="true"]');
+    if (aria) {
+      const hasDialog = Boolean(document.querySelector('[role="dialog"],.next-dialog,.next-overlay-wrapper,.next-dialog-body'));
+      const isPageWrapper = aria.id === "root" || aria.tagName === "BODY" || aria.tagName === "MAIN" ||
+        (hasDialog && !n.hasAttribute("aria-hidden") && !aria.matches("span,td,tr,dl,dt,dd,p,a,button,label,li"));
+      if (!isPageWrapper) return false;
+    }
     for (let p: HTMLElement | null = n; p; p = p.parentElement) { const s = getComputedStyle(p); if (s.display === "none" || s.visibility !== "visible" || s.opacity === "0") return false; }
     return true;
   }
@@ -308,9 +328,13 @@ export function captureAlibabaHtml(page: HtmlSource["page"], expected: string, s
       return { name: parts[0] || "", value: parts[1] || "" };
     }).filter(p => p.name && p.value).slice(0, 50);
     pairs("vct-alibaba-attributes", attrs);
-    section("vct-alibaba-review-summary", text(document.querySelector(".product-review"), 180));
+    section("vct-alibaba-review-summary", text(document.querySelector(".product-review, [role=\"dialog\"], .next-dialog"), 180));
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"],.next-dialog,.next-overlay-wrapper');
+    const dialogReviews = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('.r-relative.r-whitespace-normal, [class*="review-item"], [class*="reviewItem"], .product-review-list div.r-relative')).filter(visible) : [];
+    const inlineReviews = Array.from(document.querySelectorAll<HTMLElement>('.product-review .product-review-list div.r-relative.r-whitespace-normal, .product-review .product-review-list div.r-relative, .product-review [class*="review-item"]')).filter(visible);
+    const candidateReviews = dialogReviews.length > 0 ? dialogReviews : inlineReviews;
     const reviews = safe.createElement("section"); reviews.id = "vct-review-bodies";
-    for (const n of Array.from(document.querySelectorAll<HTMLElement>('.product-review .product-review-list div.r-relative.r-whitespace-normal')).filter(visible).slice(0, 20)) {
+    for (const n of candidateReviews.slice(0, 40)) {
       const body = safe.createElement("div"); body.className = "review-item"; body.textContent = text(n, 2000); reviews.append(body);
     }
     safe.body.append(reviews);

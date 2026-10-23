@@ -156,7 +156,7 @@ def normalize_alibaba_bundle(bundle, *, at=None):
                 raise ValueError("Product HTML price conflicts")
             summary = text("#vct-alibaba-review-summary", 180) or ""
             rating = re.match(r"([0-5](?:\.[0-9]+)?)\b", summary)
-            count = re.search(r"Based on ([0-9,]+) reviews", summary, re.I)
+            count = re.search(r"(?:Based on|Dựa trên)?\s*([0-9,]+)\s*(?:reviews|đánh giá)", summary, re.I)
             if ("rating" in fields and (not rating or float(rating[1]) != fields["rating"])) or (
                 "review_count" in fields and (not count or int(count[1].replace(",", "")) != fields["review_count"])):
                 raise ValueError("Product HTML review totals conflict")
@@ -164,7 +164,7 @@ def normalize_alibaba_bundle(bundle, *, at=None):
             if protection:
                 data["products"][0]["services_display_text"] = protection
                 data["products"][0]["services_scope"] = "Platform-advertised Alibaba order protection; eligibility and fulfillment remain unverified"
-            bodies = [{"text": " ".join(n.text().split())[:2000], "source_url": source} for n in parsed.css("#vct-review-bodies .review-item")[:20] if n.text().strip()]
+            bodies = [{"text": " ".join(n.text().split())[:2000], "source_url": source} for n in parsed.css("#vct-review-bodies .review-item")[:50] if n.text().strip()]
             selected_bodies = Counter(" ".join(item["text"].split()) for item in reviews)
             if selected_bodies - Counter(item["text"] for item in bodies):
                 raise ValueError("Product HTML review bodies conflict")

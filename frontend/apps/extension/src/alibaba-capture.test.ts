@@ -19,15 +19,24 @@ class Element {
   get href() { return this.attributes.href; } set href(v: string) { this.attributes.href = v; }
   get id() { return this.attributes.id; } set id(v: string) { this.attributes.id = v; }
   get rel() { return this.attributes.rel; } set rel(v: string) { this.attributes.rel = v; }
+  hasAttribute(name: string): boolean { return name in this.attributes; }
+  getAttribute(name: string): string | null { return this.attributes[name] ?? null; }
   get textContent(): string { return this.ownText + this.children.map(n => n.textContent).join(""); }
   set textContent(v: string) { this.ownText = v; this.children = []; }
   matches(selector: string): boolean {
     return selector.split(",").some(part => {
       const chain = part.trim().split(/\s+/), last = chain.pop()!;
-      const tag = /^[a-z]+/i.exec(last)?.[0], id = /#([\w-]+)/.exec(last)?.[1], cls = /\.([\w-]+)/.exec(last)?.[1];
+      const tag = /^[a-z0-9]+/i.exec(last)?.[0], id = /#([\w-]+)/.exec(last)?.[1], cls = /\.([\w-]+)/.exec(last)?.[1];
       if (tag && this.tagName !== tag.toUpperCase() || id && this.id !== id || cls && !this.attributes.class?.split(" ").includes(cls)) return false;
-      const attr = /\[([\w-]+)(?:="([^"]*)")?\]/.exec(last);
-      if (attr && (!(attr[1] in this.attributes) || attr[2] !== undefined && this.attributes[attr[1]] !== attr[2])) return false;
+      const attr = /\[([\w-]+)(?:([*~^$]?=)"([^"]*)")?\]/.exec(last);
+      if (attr) {
+        if (!(attr[1] in this.attributes)) return false;
+        if (attr[3] !== undefined) {
+          const val = this.attributes[attr[1]] || "";
+          const op = attr[2];
+          if (op === "*=" ? !val.includes(attr[3]) : val !== attr[3]) return false;
+        }
+      }
       if (!chain.length) return true;
       for (let p = this.parentElement; p; p = p.parentElement) if (p.matches(chain.join(" "))) return true;
       return false;
@@ -219,3 +228,55 @@ test("company name or claims changing between selection and HTML reject the snap
     assert.ok(result.selected); assert.equal(result.html, null, change);
   }
 });
+
+test("product capture succeeds even when review modal dialog sets aria-hidden on root", () => {
+  const productUrl = "https://www.alibaba.com/product-detail/Paddle-Board_1601711788226.html";
+  const shopUrl = "https://gzlianxian.en.alibaba.com/";
+  const keys = ["document", "location", "getComputedStyle", "NodeFilter"] as const;
+  const previous = keys.map(key => Object.getOwnPropertyDescriptor(globalThis, key));
+  const root = e("div", "", { id: "root", "aria-hidden": "true" });
+  const titleContainer = e("div", "", { class: "product-title-container" }).append(e("h1", "Inflatable Stand Up Paddle Board"));
+  const companyCard = e("div", "", { class: "module_unifed_company_card" });
+  const shopLink = e("a", "Guangzhou Lianxian Electronic Technology Co., Ltd.", { href: shopUrl });
+  companyCard.append(shopLink);
+  const price = e("div", "US $150.00", { "data-testid": "pc-purchase-price" });
+  root.append(titleContainer, companyCard, price);
+
+  const dialog = e("div", "", { role: "dialog", class: "next-dialog" });
+  const dialogBody = e("div", "", { class: "next-dialog-body" });
+  for (let i = 1; i <= 5; i++) {
+    dialogBody.append(e("div", `Excellent quality review number ${i}`, { class: "r-relative r-whitespace-normal" }));
+  }
+  dialog.append(dialogBody);
+
+  const page = e("body").append(root, dialog);
+  const head = e("head"), safeBody = e("body"), safeRoot = e("html").append(head, safeBody);
+  const document = {
+    querySelectorAll: (s: string) => page.querySelectorAll(s),
+    querySelector: (s: string) => page.querySelector(s),
+    createTreeWalker(n: Element) {
+      const texts = (node: Element): { parentElement: Element; textContent: string }[] => [
+        ...(node.ownText ? [{ parentElement: node, textContent: node.ownText }] : []), ...node.children.flatMap(texts)];
+      const nodes = texts(n); return { nextNode: () => nodes.shift() || null };
+    },
+    implementation: { createHTMLDocument: () => ({ head, body: safeBody, documentElement: safeRoot, createElement: (tag: string) => e(tag) }) },
+  };
+
+  try {
+    const values = [document, new URL(productUrl), (n: Element) => n.style, { SHOW_TEXT: 4 }];
+    keys.forEach((key, i) => Object.defineProperty(globalThis, key, { configurable: true, value: values[i] }));
+    const dom = captureAlibabaDom("PRODUCT", productUrl) as any;
+    assert.ok(dom);
+    assert.equal(dom.fields.product_title, "Inflatable Stand Up Paddle Board");
+    assert.equal(dom.fields.reviews.length, 5);
+    assert.equal(dom.fields.reviews[0].text, "Excellent quality review number 1");
+
+    const html = captureAlibabaHtml("PRODUCT", productUrl);
+    assert.ok(html);
+    assert.match(html.html, /Inflatable Stand Up Paddle Board/);
+    assert.match(html.html, /Excellent quality review number 1/);
+  } finally {
+    keys.forEach((key, i) => previous[i] ? Object.defineProperty(globalThis, key, previous[i]!) : Reflect.deleteProperty(globalThis, key));
+  }
+});
+

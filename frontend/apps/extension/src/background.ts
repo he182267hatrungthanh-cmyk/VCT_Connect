@@ -149,6 +149,39 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
       }
       if (supportedOffer(tab.url || "")?.sourceUrl !== sourceUrl) throw new Error("The active product changed.");
       const alibaba = supportedOffer(sourceUrl || "")?.kind === "alibaba";
+      if (alibaba) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: async () => {
+              const dialog = document.querySelector('[role="dialog"],.next-dialog,.next-overlay-wrapper');
+              if (dialog) {
+                const scrollers = [
+                  dialog.querySelector('.next-dialog-body'),
+                  dialog.querySelector('[class*="dialog-body"]'),
+                  dialog.querySelector('[class*="review"]'),
+                  dialog.querySelector('div[style*="overflow"]'),
+                  dialog,
+                ].filter((el): el is HTMLElement => Boolean(el) && el instanceof HTMLElement);
+                for (const s of scrollers) {
+                  if (s.scrollHeight > s.clientHeight) {
+                    s.scrollTop += 2500;
+                    await new Promise(r => setTimeout(r, 150));
+                    s.scrollTop += 2500;
+                    break;
+                  }
+                }
+              } else {
+                const reviewSection = document.querySelector('.product-review, [data-testid="module-product-review"], #module_product_review');
+                if (reviewSection instanceof HTMLElement) {
+                  reviewSection.scrollIntoView({ behavior: "instant", block: "center" });
+                }
+              }
+            },
+          });
+          await new Promise(resolve => setTimeout(resolve, 250));
+        } catch { /* Continue capture even if pre-scroll fails */ }
+      }
       const [injected] = alibaba
         ? await chrome.scripting.executeScript({ target: { tabId }, func: captureAlibabaDom, args: ["PRODUCT", sourceUrl!] })
         : await chrome.scripting.executeScript({ target: { tabId }, func: captureSelectedDom });
