@@ -519,7 +519,7 @@ test('visible header-only shop can be saved without a company-introduction credi
   } finally {globalThis.fetch=original;}
 });
 
-test('AUTO_COLLECT automatically captures product, opens shop and factory, and finishes under one reservation', async () => {
+test('AUTO_COLLECT automatically captures product and finishes in one click', async () => {
   const original = globalThis.fetch;
   try {
     const h = setup();
@@ -527,9 +527,7 @@ test('AUTO_COLLECT automatically captures product, opens shop and factory, and f
     assert.ok(result.id);
     assert.equal(h.stored.collectionJob.stage, 'ASSESSING');
     assert.equal(h.requests.length, 2);
-    assert.equal(h.requests[1].bundle.html_sources.length, 3);
-    assert.ok(h.created.length >= 1);
-    assert.ok(h.removed.length >= 1);
+    assert.equal(h.requests[1].bundle.html_sources.length, 1);
   } finally { globalThis.fetch = original; }
 });
 

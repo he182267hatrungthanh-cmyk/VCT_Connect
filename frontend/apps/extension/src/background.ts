@@ -284,52 +284,9 @@ async function autoCollect(tabId: number, ownerId: string, sourceUrl?: string): 
   const session = stored[SESSION_KEY] as GuidedSession | undefined;
   if (!session || !session.reserved) return { id: start.id };
 
-  const company = session.bundle.shop_url;
-  if (!company) {
-    await finishSession(session);
-    return { id: session.job.id };
-  }
-
-  let workTabId: number | undefined;
-  try {
-    const tab = await chrome.tabs.create({ url: company, active: true });
-    workTabId = tab?.id;
-    if (!workTabId) throw new Error("Could not open supplier shop tab");
-
-    await waitForTab(workTabId);
-    await guided("CONTINUE_GUIDED", workTabId, ownerId);
-
-    const afterShop = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
-    const factory = afterShop?.job.factoryUrl || afterShop?.bundle.shop?.factory_url;
-
-    if (factory && workTabId) {
-      if (chrome.tabs.update) {
-        await chrome.tabs.update(workTabId, { url: factory });
-      } else {
-        const next = await chrome.tabs.create({ url: factory, active: true });
-        workTabId = next?.id ?? workTabId;
-      }
-      await waitForTab(workTabId);
-      await guided("CONTINUE_GUIDED", workTabId, ownerId);
-    } else if (afterShop && afterShop.job.stage !== "ASSESSING") {
-      await finishSession(afterShop);
-    }
-
-    const finalStored = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
-    if (finalStored?.job.stage === "ASSESSING" && workTabId) {
-      try { await chrome.tabs.remove(workTabId); } catch {}
-    }
-  } catch (err) {
-    const current = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
-    if (current && ["WAITING_COMPANY", "WAITING_FACTORY"].includes(current.job.stage)) {
-      if (workTabId && chrome.tabs.update) {
-        try { await chrome.tabs.update(workTabId, { active: true }); } catch {}
-      }
-    }
-    throw err;
-  }
-
-  return { id: start.id };
+  // 1 single click: directly finish and submit product evidence without opening new tabs or jumping
+  await finishSession(session);
+  return { id: session.job.id };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
