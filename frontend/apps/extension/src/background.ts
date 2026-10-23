@@ -242,15 +242,110 @@ async function guided(type: string, tabId: number, ownerId: string, sourceUrl?: 
   } finally { running = false; }
 }
 
+async function waitForTab(tabId: number, timeoutMs = 14000): Promise<void> {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        try { chrome.tabs.onUpdated.removeListener?.(listener); } catch {}
+        setTimeout(resolve, 1500);
+      }
+    };
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        try { chrome.tabs.onUpdated.removeListener?.(listener); } catch {}
+        resolve();
+      }
+    }, timeoutMs);
+
+    function listener(id: number, change: chrome.tabs.TabChangeInfo) {
+      if (id === tabId && change.status === "complete") {
+        finish();
+      }
+    }
+    try { chrome.tabs.onUpdated.addListener(listener); } catch {}
+
+    chrome.tabs.get(tabId).then((tab) => {
+      if (tab?.status === "complete") {
+        finish();
+      }
+    }).catch(() => {});
+  });
+}
+
+async function autoCollect(tabId: number, ownerId: string, sourceUrl?: string): Promise<{ id: string }> {
+  const start = await guided("START_COLLECTION", tabId, ownerId, sourceUrl);
+  if (!start?.id) throw new Error("Could not start product collection");
+
+  const stored = await chrome.storage.local.get(SESSION_KEY);
+  const session = stored[SESSION_KEY] as GuidedSession | undefined;
+  if (!session || !session.reserved) return { id: start.id };
+
+  const company = session.bundle.shop_url;
+  if (!company) {
+    await finishSession(session);
+    return { id: session.job.id };
+  }
+
+  let workTabId: number | undefined;
+  try {
+    const tab = await chrome.tabs.create({ url: company, active: true });
+    workTabId = tab?.id;
+    if (!workTabId) throw new Error("Could not open supplier shop tab");
+
+    await waitForTab(workTabId);
+    await guided("CONTINUE_GUIDED", workTabId, ownerId);
+
+    const afterShop = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
+    const factory = afterShop?.job.factoryUrl || afterShop?.bundle.shop?.factory_url;
+
+    if (factory && workTabId) {
+      if (chrome.tabs.update) {
+        await chrome.tabs.update(workTabId, { url: factory });
+      } else {
+        const next = await chrome.tabs.create({ url: factory, active: true });
+        workTabId = next?.id ?? workTabId;
+      }
+      await waitForTab(workTabId);
+      await guided("CONTINUE_GUIDED", workTabId, ownerId);
+    } else if (afterShop && afterShop.job.stage !== "ASSESSING") {
+      await finishSession(afterShop);
+    }
+
+    const finalStored = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
+    if (finalStored?.job.stage === "ASSESSING" && workTabId) {
+      try { await chrome.tabs.remove(workTabId); } catch {}
+    }
+  } catch (err) {
+    const current = (await chrome.storage.local.get(SESSION_KEY))[SESSION_KEY] as GuidedSession | undefined;
+    if (current && ["WAITING_COMPANY", "WAITING_FACTORY"].includes(current.job.stage)) {
+      if (workTabId && chrome.tabs.update) {
+        try { await chrome.tabs.update(workTabId, { active: true }); } catch {}
+      }
+    }
+    throw err;
+  }
+
+  return { id: start.id };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.url?.endsWith("/popup.html") ||
-      !["START_COLLECTION", "CONTINUE_GUIDED", "FINISH_GUIDED", "SHOW_GUIDANCE"].includes(message?.type)) return;
+      !["START_COLLECTION", "CONTINUE_GUIDED", "FINISH_GUIDED", "SHOW_GUIDANCE", "AUTO_COLLECT"].includes(message?.type)) return;
   if (!Number.isInteger(message.tabId) || typeof message.ownerId !== "string" || !message.ownerId.startsWith("user_") ||
-      (message.type === "START_COLLECTION" && !(supportedOffer(message.sourceUrl || "")?.sourceUrl === message.sourceUrl && [undefined, "alibaba"].includes(supportedOffer(message.sourceUrl || "")?.kind)))) {
+      (["START_COLLECTION", "AUTO_COLLECT"].includes(message.type) && !(supportedOffer(message.sourceUrl || "")?.sourceUrl === message.sourceUrl && [undefined, "alibaba"].includes(supportedOffer(message.sourceUrl || "")?.kind)))) {
     respond({ error: "Invalid collection request" }); return;
   }
   if (message.type === "SHOW_GUIDANCE") {
     void guideTab(message.tabId, message.ownerId).then(() => respond({ ok: true })).catch(() => respond({ ok: false }));
+    return true;
+  }
+  if (message.type === "AUTO_COLLECT") {
+    void autoCollect(message.tabId, message.ownerId, message.sourceUrl)
+      .then(respond).catch(error => respond({ error: error instanceof Error ? error.message : "Auto capture failed" }));
     return true;
   }
   void guided(message.type, message.tabId, message.ownerId, message.sourceUrl)

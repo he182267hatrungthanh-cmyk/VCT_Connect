@@ -202,10 +202,14 @@ export function App({ initialLanguage = "vi", onLanguageChange }: { initialLangu
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!current()) return;
         if (!tab?.id || supportedOffer(tab.url || "")?.sourceUrl !== page.sourceUrl) throw new Error("The active product changed; try again");
-        const reply = await chrome.runtime.sendMessage({ type: "START_COLLECTION", tabId: tab.id,
+        const reply = await chrome.runtime.sendMessage({ type: "AUTO_COLLECT", tabId: tab.id,
           ownerId: userId, sourceUrl: page.sourceUrl });
         if (!current()) return;
-        if (!reply?.id) throw new Error(reply?.error || "Could not start collection");
+        if (!reply?.id) {
+          const stored = await chrome.storage.local.get("collectionJob");
+          setCollectionJob(restoreCollectionJob(stored.collectionJob, userId!));
+          throw new Error(reply?.error || "Could not start collection");
+        }
         const last = { analysisId: reply.id, sourceUrl: page.sourceUrl, ownerId: userId! };
         setLastCapture(last);
         const stored = await chrome.storage.local.get("collectionJob");
