@@ -1,7 +1,7 @@
 "use client";
 
 import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { type AccountState, type Analysis, type AnalysisHistoryItem, type ReportV1, type WatchlistEntry } from "@vct/contracts";
 import { ApiError, addWatchlist, getAccountState, getAnalysis, getAnalysisHistory, getReport, getWatchlist, removeWatchlist } from "@vct/api-client";
 import { analysisPresentation } from "./analysis-status";
@@ -106,6 +106,7 @@ export default function Page() {
   const [report, setReport] = useState<ReportV1 | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const reportCache = useRef<Map<string, ReportV1>>(new Map());
   const [id, setId] = useState<string | null>(null);
   const [reopenVersion, setReopenVersion] = useState(0);
   const [error, setError] = useState("");
@@ -243,6 +244,7 @@ export default function Page() {
     void getReport(id, { getToken }).then(
       value => {
         if (!active) return;
+        reportCache.current.set(id, value);
         setReport(value);
         setReportError("");
       },
@@ -318,13 +320,29 @@ export default function Page() {
     setView("analysis");
     setId(item.id);
     setReopenVersion(version => version + 1);
-    setAnalysis(null);
-    setReport(null);
-    setReportError("");
-    setReportLoading(false);
+    setAnalysis({
+      id: item.id,
+      source_url: item.source_url,
+      attempt_count: 1,
+      failure_code: null,
+      extraction_method: item.extraction_method,
+      status: item.status,
+      created_at: item.created_at,
+      result: null,
+    });
     setError("");
     setDelayed(false);
     setRequestedMethod(item.extraction_method);
+    const cached = reportCache.current.get(item.id);
+    if (cached) {
+      setReport(cached);
+      setReportLoading(false);
+      setReportError("");
+    } else {
+      setReport(null);
+      setReportError("");
+      setReportLoading(Boolean(item.report_available));
+    }
   }
 
   function showNewAnalysis() {
@@ -352,11 +370,11 @@ export default function Page() {
     <div className="workspace">
       <header className="workspace-header"><div><span>Không gian làm việc</span><i>/</i><strong>{view === "extension" ? "Tiện ích & hướng dẫn" : view === "analysis" ? "Báo cáo" : view === "history" ? "Lịch sử" : view === "watchlist" ? "Theo dõi" : "Tài khoản"}</strong></div><div className="mobile-brand"><Brand /></div><nav className="mobile-nav" aria-label="Điều hướng di động">{(["extension", ...(id ? ["analysis"] : []), "history", "watchlist", "account"] as WorkspaceView[]).map(item => <button key={item} type="button" className={view === item ? "active" : ""} aria-current={view === item ? "page" : undefined} onClick={() => changeView(item)}>{{ extension: "Hướng dẫn", analysis: "Báo cáo", history: "Lịch sử", watchlist: "Theo dõi", account: "Tài khoản" }[item]}</button>)}</nav><div className="header-tools"><span className="language">VI</span><UserButton /></div></header>
       {view === "extension" ? <ExtensionGuide key={userId} getToken={getToken} onHistory={() => setView("history")} /> : view === "history" ? <AnalysisHistory items={analysisHistory} loading={historyLoading} error={historyError} onOpen={openHistoryAnalysis} onNewAnalysis={showNewAnalysis} /> : view === "watchlist" ? <WatchlistView entries={watchlist} loading={watchlistLoading} error={watchlistError} removingId={watchlistRemovingId} onOpen={openWatchlistAnalysis} onRemove={deleteWatchlistEntry} /> : view === "account" ? (accountState ? <AccountStateView state={accountState} getToken={getToken} onRefresh={async () => { const fresh = await getAccountState({ getToken }); setAccountState(fresh); }} /> : <main className="dashboard account-dashboard"><section className="account-card" aria-live="polite">{accountLoading ? <p>Đang tải trạng thái tài khoản…</p> : <p role={accountError ? "alert" : undefined}>{accountError || "Chưa có trạng thái tài khoản."}</p>}</section></main>) : <main className="dashboard" id="analysis">
-        <section className="dashboard-intro"><div><Pill tone="good">THẨM ĐỊNH NHÀ CUNG CẤP</Pill><h1>Báo cáo nhà cung cấp</h1><p>Đối chiếu từng nhận định với bằng chứng đã thu thập.</p></div><button type="button" className="button button-ghost" onClick={showNewAnalysis}>+ Phân tích mới</button></section>
+        <section className="dashboard-intro"><div><Pill tone="good">THẨM ĐỊNH NHÀ CUNG CẤP</Pill><h1>Báo cáo nhà cung cấp</h1><p>Đối chiếu từng nhận định với bằng chứng đã thu thập.</p></div></section>
         {analysis?.source_url && <p className="analysis-source">Nguồn sản phẩm: <a href={analysis.source_url} target="_blank" rel="noopener noreferrer">{analysis.source_url} ↗</a></p>}
         {error && <div role="alert" className="error-banner"><span>!</span><div><strong>Không thể tiếp tục</strong><p>{error === "Analysis not found" ? "Không tìm thấy phân tích. Vui lòng tạo phân tích mới." : error}</p></div></div>}
-        {id && <ProgressCard analysis={analysis} delayed={delayed} requestedMethod={requestedMethod} reportAvailable={Boolean(report)} />}
-        {id && analysis?.status === "COMPLETED" && reportLoading &&
+        {id && (!report && analysis?.status !== "COMPLETED") && !reportLoading && <ProgressCard analysis={analysis} delayed={delayed} requestedMethod={requestedMethod} reportAvailable={Boolean(report)} />}
+        {id && reportLoading &&
           <section className="report-loading" aria-live="polite"><i className="spinner" /><span>Đang tải báo cáo đánh giá đã lưu…</span></section>}
         {id && analysis?.status === "COMPLETED" && report && <><div className="report-watchlist-action"><button type="button" className="button button-ghost" disabled={watchlistBusy} onClick={() => { void saveCurrentSupplier(); }}>{watchlistBusy ? "Đang lưu…" : "☆ Theo dõi nhà cung cấp"}</button>{watchlistError && <span role="alert">{watchlistError}</span>}</div><FullReport key={report.analysis_id} report={report} extractionMethod={analysis.extraction_method} /></>}
         {id && analysis?.status === "COMPLETED" && !reportLoading && !report && reportError &&

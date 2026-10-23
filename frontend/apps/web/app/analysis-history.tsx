@@ -43,7 +43,7 @@ export function AnalysisHistory({
   loading: boolean;
   error: string;
   onOpen: (item: AnalysisHistoryItem) => void;
-  onNewAnalysis: () => void;
+  onNewAnalysis?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const normalized = query.trim().toLocaleLowerCase("vi");
@@ -67,7 +67,6 @@ export function AnalysisHistory({
         <h1>Lịch sử phân tích</h1>
         <p>Các phân tích được lưu trên VCT Connect và chỉ hiển thị cho tài khoản đã tạo chúng.</p>
       </div>
-      <button type="button" className="button button-primary" onClick={onNewAnalysis}>+ Phân tích mới</button>
     </section>
 
     <section className="history-panel server-history-panel" aria-label="Lịch sử phân tích của bạn">
