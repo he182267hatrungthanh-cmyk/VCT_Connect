@@ -733,9 +733,6 @@ button { cursor: pointer; }
 
 .payment-success-card { text-align: center; padding: 2rem 1rem; }
 .payment-success-icon { font-size: 3.5rem; color: var(--success); margin-bottom: 0.5rem; }
-.demo-simulate-box { margin-top: 1.2rem; padding: 0.8rem; background: #fff8e6; border: 1px dashed #d97706; border-radius: 9px; font-size: 0.82rem; text-align: center; }
-.demo-simulate-btn { margin-top: 0.4rem; background: #d97706; color: #fff; border: none; padding: 0.45rem 0.9rem; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
-.demo-simulate-btn:hover { background: #b45309; }
 
 /* Pricing Tier Grid */
 .pricing-section { margin-top: 2rem; }

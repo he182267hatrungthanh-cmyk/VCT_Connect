@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { AccountState, PaymentOrder } from "@vct/contracts";
-import { createPaymentOrder, getPaymentOrderStatus, simulatePayment } from "@vct/api-client";
+import { createPaymentOrder, getPaymentOrderStatus } from "@vct/api-client";
 
 function dateTime(value: string | null) {
   if (!value) return "Chưa có";
@@ -37,7 +37,6 @@ export function AccountStateView({
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [simulating, setSimulating] = useState(false);
   const [orderError, setOrderError] = useState("");
 
   const handleStartUpgrade = async (planCode: "PRO_MONTHLY" | "ULTRA_MONTHLY" | "TOPUP_50" = "PRO_MONTHLY") => {
@@ -85,21 +84,6 @@ export function AccountStateView({
     }
   };
 
-  const handleSimulate = async () => {
-    if (!order || !getToken) return;
-    setSimulating(true);
-    try {
-      await simulatePayment(order.order_code, { getToken });
-      setPaymentSuccess(true);
-      if (onRefresh) {
-        void onRefresh();
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Giả lập thanh toán lỗi");
-    } finally {
-      setSimulating(false);
-    }
-  };
 
   return (
     <main className="dashboard account-dashboard" id="account">
@@ -364,19 +348,6 @@ export function AccountStateView({
                   <span>Hệ thống đang tự động lắng nghe thanh toán…</span>
                 </div>
 
-                {/* Simulation button for demo / testing before real SePay activation */}
-                <div className="demo-simulate-box">
-                  <span>💡 <strong>Dành cho Demo / Thử nghiệm:</strong> Chưa kịp chuyển tiền thật?</span>
-                  <br />
-                  <button
-                    type="button"
-                    className="demo-simulate-btn"
-                    disabled={simulating}
-                    onClick={() => void handleSimulate()}
-                  >
-                    {simulating ? "Đang xử lý…" : "⚡ Bấm vào đây để Giả lập chuyển khoản thành công"}
-                  </button>
-                </div>
               </>
             )}
 

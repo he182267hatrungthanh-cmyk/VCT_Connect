@@ -34,6 +34,66 @@ PLAN_PRICING = {
 }
 
 
+BANK_CODE_MAP = {
+    "acb": "ACB",
+    "acb one": "ACB",
+    "acbone": "ACB",
+    "á châu": "ACB",
+    "a chau": "ACB",
+    "mb": "MB",
+    "mbbank": "MB",
+    "mb bank": "MB",
+    "quân đội": "MB",
+    "quan doi": "MB",
+    "vcb": "VCB",
+    "vietcombank": "VCB",
+    "vietcom bank": "VCB",
+    "tcb": "TCB",
+    "techcombank": "TCB",
+    "techcom bank": "TCB",
+    "icb": "ICB",
+    "vietinbank": "ICB",
+    "vietin bank": "ICB",
+    "bidv": "BIDV",
+    "vpb": "VPB",
+    "vpbank": "VPB",
+    "vp bank": "VPB",
+    "tpb": "TPB",
+    "tpbank": "TPB",
+    "tp bank": "TPB",
+    "shb": "SHB",
+    "hdb": "HDB",
+    "hdbank": "HDB",
+    "vba": "VBA",
+    "agribank": "VBA",
+    "agri bank": "VBA",
+    "stb": "STB",
+    "sacombank": "STB",
+    "msb": "MSB",
+    "vib": "VIB",
+    "ocb": "OCB",
+    "scb": "SCB",
+    "lpb": "LPB",
+    "lpbank": "LPB",
+    "seabank": "SEAB",
+}
+
+
+def normalize_bank_code(raw_name: str) -> str:
+    cleaned = (raw_name or "").strip()
+    lowered = cleaned.lower()
+    if lowered in BANK_CODE_MAP:
+        return BANK_CODE_MAP[lowered]
+    for key, code in BANK_CODE_MAP.items():
+        if key in lowered:
+            return code
+    first_word = re.split(r"[\s\-_]+", cleaned)[0]
+    first_lowered = first_word.lower()
+    if first_lowered in BANK_CODE_MAP:
+        return BANK_CODE_MAP[first_lowered]
+    return re.sub(r"[^a-zA-Z0-9]", "", first_word).upper() or "ACB"
+
+
 def register_payment_routes(app, store, settings, customer_dependency):
     @app.post("/api/v1/payments/create-order", status_code=201)
     async def create_order(
@@ -62,10 +122,12 @@ def register_payment_routes(app, store, settings, customer_dependency):
             raise HTTPException(500, "Failed to create payment order") from exc
 
         # Generate VietQR image URL
+        bank_code = normalize_bank_code(settings.payment_bank_name)
+        clean_account = re.sub(r"[^0-9a-zA-Z]", "", settings.payment_bank_account)
         account_name_encoded = urllib.parse.quote(settings.payment_bank_account_holder)
         qr_url = (
-            f"https://img.vietqr.io/image/{settings.payment_bank_name}-"
-            f"{settings.payment_bank_account}-compact2.png"
+            f"https://img.vietqr.io/image/{bank_code}-"
+            f"{clean_account}-compact2.png"
             f"?amount={plan['amount']}&addInfo={order_code}&accountName={account_name_encoded}"
         )
 
