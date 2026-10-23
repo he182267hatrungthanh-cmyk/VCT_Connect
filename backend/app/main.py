@@ -33,6 +33,7 @@ from .storage import AdmissionDenied, Store
 from .evaluation import list_blind_cases, submit_blind_label
 from .reporting.preview import build_guest_preview
 from .collection_api import register_collection_routes
+from .payment_api import register_payment_routes
 
 
 TAOBAO_PAUSED_DETAIL = (
@@ -180,6 +181,8 @@ def create_app(
                 principal.user_id,
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
+                pro_limit=settings.pro_customer_limit,
+                ultra_limit=settings.ultra_customer_limit,
                 window_seconds=settings.admission_window_seconds,
             )
         except Exception as exc:
@@ -243,6 +246,7 @@ def create_app(
                 azure=settings.queue_transport == "azure",
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
+                pro_limit=settings.pro_customer_limit,
                 window_seconds=settings.admission_window_seconds,
             )
         except AdmissionDenied as exc:
@@ -313,6 +317,7 @@ def create_app(
                 source_url, principal.user_id, payload,
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
+                pro_limit=settings.pro_customer_limit,
                 window_seconds=settings.admission_window_seconds,
                 azure=settings.queue_transport == "azure",
             )
@@ -327,6 +332,7 @@ def create_app(
         }
 
     register_collection_routes(app, store, settings, require_roles(CUSTOMER), AdmissionDenied)
+    register_payment_routes(app, store, settings, require_roles(CUSTOMER))
 
     @app.post("/api/v1/analyses/capture", status_code=201)
     async def capture_browser_evidence(
@@ -365,6 +371,7 @@ def create_app(
                 payload["source_url"], principal.user_id, payload,
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
+                pro_limit=settings.pro_customer_limit,
                 window_seconds=settings.admission_window_seconds,
                 azure=settings.queue_transport == "azure",
             )

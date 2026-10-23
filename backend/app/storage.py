@@ -68,6 +68,51 @@ class Store(CollectionStoreMixin):
         return row
 
     @staticmethod
+    def _ultra_active(conn, user_id: UUID) -> bool:
+        return bool(conn.execute(
+            """SELECT EXISTS (
+                 SELECT 1 FROM entitlements
+                 WHERE user_id = %s
+                   AND entitlement = 'ANALYSIS_ACCESS'
+                   AND source = 'PAID_ULTRA'
+                   AND status = 'ACTIVE'
+                   AND starts_at <= now()
+                   AND (expires_at IS NULL OR expires_at > now())
+               ) AS active""",
+            (user_id,),
+        ).fetchone()["active"])
+
+    @staticmethod
+    def _pro_active(conn, user_id: UUID) -> bool:
+        return bool(conn.execute(
+            """SELECT EXISTS (
+                 SELECT 1 FROM entitlements
+                 WHERE user_id = %s
+                   AND entitlement = 'ANALYSIS_ACCESS'
+                   AND source = 'PAID_PRO'
+                   AND status = 'ACTIVE'
+                   AND starts_at <= now()
+                   AND (expires_at IS NULL OR expires_at > now())
+               ) AS active""",
+            (user_id,),
+        ).fetchone()["active"])
+
+    @staticmethod
+    def _topup_bonus(conn, user_id: UUID) -> int:
+        """Count active top-up packages (+50 each)."""
+        row = conn.execute(
+            """SELECT COUNT(*) * 50 AS bonus FROM entitlements
+               WHERE user_id = %s
+                 AND entitlement = 'ANALYSIS_ACCESS'
+                 AND source = 'TOPUP_50'
+                 AND status = 'ACTIVE'
+                 AND starts_at <= now()
+                 AND (expires_at IS NULL OR expires_at > now())""",
+            (user_id,),
+        ).fetchone()
+        return int(row["bonus"]) if row and row["bonus"] else 0
+
+    @staticmethod
     def _trial_active(conn, user_id: UUID) -> bool:
         return bool(conn.execute(
             """SELECT EXISTS (
@@ -83,16 +128,27 @@ class Store(CollectionStoreMixin):
         ).fetchone()["active"])
 
     @classmethod
-    def _customer_quota(cls, conn, user_id: UUID, free_limit: int, trial_limit: int | None) -> int:
+    def _customer_quota(
+        cls, conn, user_id: UUID, free_limit: int, trial_limit: int | None,
+        pro_limit: int | None = 100, ultra_limit: int | None = 399,
+    ) -> int:
+        bonus = cls._topup_bonus(conn, user_id)
+        if cls._ultra_active(conn, user_id):
+            return (ultra_limit or 399) + bonus
+        if cls._pro_active(conn, user_id):
+            return (pro_limit or 100) + bonus
         if trial_limit is None:
-            return free_limit
-        return trial_limit if cls._trial_active(conn, user_id) else free_limit
+            base = free_limit
+        else:
+            base = trial_limit if cls._trial_active(conn, user_id) else free_limit
+        return base + bonus
 
     def get_account_state(
         self, user_id: UUID, *, customer_limit: int, window_seconds: int,
-        trial_limit: int | None = None,
+        trial_limit: int | None = None, pro_limit: int | None = 100,
+        ultra_limit: int | None = 399,
     ) -> dict | None:
-        """Return the signed-in customer's current plan, trial and admission usage."""
+        """Return the signed-in customer's current plan, trial, pro, ultra and admission usage."""
         with self.connect() as conn:
             user = conn.execute(
                 """SELECT id, clerk_user_id, email, role
@@ -101,6 +157,38 @@ class Store(CollectionStoreMixin):
             ).fetchone()
             if user is None:
                 return None
+            ultra = conn.execute(
+                """SELECT entitlement, source, starts_at, expires_at, status,
+                          (status = 'ACTIVE'
+                           AND starts_at <= now()
+                           AND (expires_at IS NULL OR expires_at > now())) AS active
+                   FROM entitlements
+                   WHERE user_id = %s
+                     AND entitlement = 'ANALYSIS_ACCESS'
+                     AND source = 'PAID_ULTRA'
+                   ORDER BY (status = 'ACTIVE'
+                             AND starts_at <= now()
+                             AND (expires_at IS NULL OR expires_at > now())) DESC,
+                            starts_at DESC
+                   LIMIT 1""",
+                (user_id,),
+            ).fetchone()
+            pro = conn.execute(
+                """SELECT entitlement, source, starts_at, expires_at, status,
+                          (status = 'ACTIVE'
+                           AND starts_at <= now()
+                           AND (expires_at IS NULL OR expires_at > now())) AS active
+                   FROM entitlements
+                   WHERE user_id = %s
+                     AND entitlement = 'ANALYSIS_ACCESS'
+                     AND source = 'PAID_PRO'
+                   ORDER BY (status = 'ACTIVE'
+                             AND starts_at <= now()
+                             AND (expires_at IS NULL OR expires_at > now())) DESC,
+                            starts_at DESC
+                   LIMIT 1""",
+                (user_id,),
+            ).fetchone()
             trial = conn.execute(
                 """SELECT entitlement, source, starts_at, expires_at, status,
                           (status = 'ACTIVE'
@@ -117,6 +205,7 @@ class Store(CollectionStoreMixin):
                    LIMIT 1""",
                 (user_id,),
             ).fetchone()
+            bonus = self._topup_bonus(conn, user_id)
             usage = conn.execute(
                 """WITH current_window AS (
                      SELECT floor(extract(epoch FROM now()) / %s)::bigint AS n
@@ -132,14 +221,37 @@ class Store(CollectionStoreMixin):
                 (window_seconds, window_seconds, window_seconds, str(user_id)),
             ).fetchone()
         used = int(usage["used"])
-        effective_limit = trial_limit if trial and trial["active"] and trial_limit is not None else customer_limit
+        if ultra and ultra["active"]:
+            effective_limit = (ultra_limit or 399) + bonus
+            current_plan = "PAID_ULTRA"
+        elif pro and pro["active"]:
+            effective_limit = (pro_limit or 100) + bonus
+            current_plan = "PAID_PRO"
+        elif trial and trial["active"] and trial_limit is not None:
+            effective_limit = trial_limit + bonus
+            current_plan = "MVP_TRIAL"
+        else:
+            effective_limit = customer_limit + bonus
+            current_plan = "FREE"
+
         return {
             "user": {
                 "id": user["id"],
                 "email": user["email"],
                 "role": user["role"],
             },
-            "plan": "MVP_TRIAL" if trial and trial["active"] else "FREE",
+            "plan": current_plan,
+            "ultra": {
+                "active": bool(ultra and ultra["active"]),
+                "starts_at": ultra["starts_at"] if ultra else None,
+                "expires_at": ultra["expires_at"] if ultra else None,
+            },
+            "pro": {
+                "active": bool(pro and pro["active"]),
+                "starts_at": pro["starts_at"] if pro else None,
+                "expires_at": pro["expires_at"] if pro else None,
+            },
+            "bonus_limit": bonus,
             "trial": {
                 "active": bool(trial and trial["active"]),
                 "starts_at": trial["starts_at"] if trial else None,
@@ -208,7 +320,7 @@ class Store(CollectionStoreMixin):
         guest_key_hash: str | None = None, actor_type: str = "LEGACY",
         browser_limit: int | None = None, global_limit: int | None = None,
         customer_limit: int | None = None, window_seconds: int = 86400,
-        trial_limit: int | None = None,
+        trial_limit: int | None = None, pro_limit: int | None = 100,
     ) -> UUID:
         analysis_id = uuid4()
         with self.connect() as conn:
@@ -220,7 +332,7 @@ class Store(CollectionStoreMixin):
                 elif actor_type == "CUSTOMER":
                     assert user_id is not None and customer_limit is not None
                     self._admit(conn, "CUSTOMER", str(user_id),
-                                self._customer_quota(conn, user_id, customer_limit, trial_limit), window_seconds)
+                                self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
                 self._insert_analysis(
                     conn, analysis_id, source_url, user_id,
                     guest_key_hash=guest_key_hash, actor_type=actor_type,
@@ -254,11 +366,12 @@ class Store(CollectionStoreMixin):
     def submit_customer(
         self, source_url: str, user_id: UUID, *, azure: bool,
         customer_limit: int, window_seconds: int, trial_limit: int | None = None,
+        pro_limit: int | None = 100,
     ) -> UUID:
         return self._submit(
             source_url, user_id, azure=azure, actor_type="CUSTOMER",
             customer_limit=customer_limit, window_seconds=window_seconds,
-            trial_limit=trial_limit,
+            trial_limit=trial_limit, pro_limit=pro_limit,
         )
 
     _SELECT = """
@@ -694,7 +807,7 @@ class Store(CollectionStoreMixin):
     def import_customer_page(
         self, source_url: str, user_id: UUID, payload: dict, *,
         customer_limit: int, window_seconds: int, trial_limit: int | None = None,
-        azure: bool = False,
+        pro_limit: int | None = 100, azure: bool = False,
     ) -> UUID:
         """Atomically persist uploaded evidence and queue supported snapshots for assessment."""
         supplier_data = payload.get("supplier_data")
@@ -712,7 +825,7 @@ class Store(CollectionStoreMixin):
         with self.connect() as conn:
             with conn.transaction():
                 self._admit(conn, "CUSTOMER", str(user_id),
-                            self._customer_quota(conn, user_id, customer_limit, trial_limit), window_seconds)
+                            self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
                 self._insert_analysis(conn, analysis_id, source_url, user_id, actor_type="CUSTOMER")
                 conn.execute(
                     """UPDATE analyses SET status = 'PROCESSING', attempt_count = 1,
@@ -739,7 +852,7 @@ class Store(CollectionStoreMixin):
     def capture_customer_page(
         self, source_url: str, user_id: UUID, payload: dict, *,
         customer_limit: int, window_seconds: int, azure: bool = False,
-        trial_limit: int | None = None,
+        trial_limit: int | None = None, pro_limit: int | None = 100,
     ) -> UUID:
         """Persist selected browser evidence, then queue extracted snapshots for assessment/reporting."""
         reject_sensitive_page_state(payload.get("raw_payload", {}))
@@ -758,7 +871,7 @@ class Store(CollectionStoreMixin):
         with self.connect() as conn:
             with conn.transaction():
                 self._admit(conn, "CUSTOMER", str(user_id),
-                            self._customer_quota(conn, user_id, customer_limit, trial_limit), window_seconds)
+                            self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
                 previous = conn.execute(
                     """SELECT s.id AS supplier_snapshot_id, s.normalized_data AS supplier_data,
                               s.raw_payload AS raw_payload
@@ -1104,3 +1217,83 @@ class Store(CollectionStoreMixin):
                     failure_code=row["failure_code"], disposition="DEAD_LETTERED",
                 )
                 return True
+
+    def create_payment_order(
+        self, user_id: UUID, plan_code: str, amount: int, order_code: str,
+        expires_at, gateway: str = "SEPAY",
+    ) -> dict:
+        order_id = uuid4()
+        with self.connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    """INSERT INTO payment_orders
+                         (id, user_id, order_code, plan_code, amount, status, gateway, expires_at)
+                       VALUES (%s, %s, %s, %s, %s, 'PENDING', %s, %s)
+                       RETURNING id, user_id, order_code, plan_code, amount, status, gateway,
+                                 created_at, expires_at""",
+                    (order_id, user_id, order_code, plan_code, amount, gateway, expires_at),
+                ).fetchone()
+        return dict(row)
+
+    def get_payment_order(self, order_code: str) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT id, user_id, order_code, plan_code, amount, status, gateway,
+                          gateway_transaction_id, created_at, paid_at, expires_at
+                   FROM payment_orders
+                   WHERE order_code = %s""",
+                (order_code,),
+            ).fetchone()
+            if row is None:
+                return None
+            return dict(row)
+
+    def fulfill_payment_order(
+        self, order_code: str, gateway_transaction_id: str | None = None,
+        paid_amount: int | None = None,
+    ) -> bool:
+        """Atomically mark order as PAID and grant PAID_PRO entitlement for 30 days."""
+        with self.connect() as conn:
+            with conn.transaction():
+                order = conn.execute(
+                    """SELECT id, user_id, plan_code, amount, status, expires_at
+                       FROM payment_orders
+                       WHERE order_code = %s
+                       FOR UPDATE""",
+                    (order_code,),
+                ).fetchone()
+                if order is None:
+                    return False
+                if order["status"] == "PAID":
+                    return True  # Idempotent: already fulfilled
+                if paid_amount is not None and paid_amount < order["amount"]:
+                    return False  # Underpaid
+                
+                # Mark order as PAID
+                conn.execute(
+                    """UPDATE payment_orders
+                       SET status = 'PAID', paid_at = now(), gateway_transaction_id = %s
+                       WHERE id = %s""",
+                    (gateway_transaction_id, order["id"]),
+                )
+                
+                # Determine entitlement source from plan_code
+                if order["plan_code"] == "ULTRA_MONTHLY":
+                    source = "PAID_ULTRA"
+                elif order["plan_code"] == "TOPUP_50":
+                    source = "TOPUP_50"
+                else:
+                    source = "PAID_PRO"
+
+                # Grant entitlement for 30 days
+                entitlement_id = uuid4()
+                conn.execute(
+                    """INSERT INTO entitlements
+                         (id, user_id, entitlement, source, status, starts_at, expires_at)
+                       VALUES (%s, %s, 'ANALYSIS_ACCESS', %s, 'ACTIVE', now(), now() + interval '30 days')
+                       ON CONFLICT (user_id, entitlement, source, starts_at) DO UPDATE
+                       SET status = 'ACTIVE', expires_at = now() + interval '30 days'""",
+                    (entitlement_id, order["user_id"], source),
+                )
+                return True
+

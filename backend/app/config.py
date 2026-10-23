@@ -31,12 +31,18 @@ class Settings:
     guest_global_limit: int = 100
     customer_limit: int = 20
     trial_customer_limit: int = 40
+    pro_customer_limit: int = 100
+    ultra_customer_limit: int = 399
     admission_window_seconds: int = 86400
     public_browser_fallback: bool = False
     yescale_api_key: str | None = None
     yescale_base_url: str = "https://api.yescale.io/v1"
     yescale_model: str = "gpt-4o-mini"
     yescale_embedding_model: str | None = None
+    sepay_api_key: str | None = None
+    payment_bank_name: str = "MBBank"
+    payment_bank_account: str = "0123456789"
+    payment_bank_account_holder: str = "VCT CONNECT"
 
     def __post_init__(self) -> None:
         if not 1 <= self.processing_max_attempts <= 10:
@@ -45,7 +51,7 @@ class Settings:
             raise ValueError(
                 "PROCESSING_LEASE_SECONDS must be at least AZURE_LOCK_RENEWAL_SECONDS"
             )
-        for name in ("guest_browser_limit", "guest_global_limit", "customer_limit", "trial_customer_limit", "admission_window_seconds"):
+        for name in ("guest_browser_limit", "guest_global_limit", "customer_limit", "trial_customer_limit", "pro_customer_limit", "ultra_customer_limit", "admission_window_seconds"):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} must be positive")
 
@@ -103,12 +109,18 @@ class Settings:
             guest_global_limit=_bounded_int("GUEST_GLOBAL_LIMIT", 100, 1, 1000000),
             customer_limit=_bounded_int("CUSTOMER_LIMIT", 20, 1, 100000),
             trial_customer_limit=_bounded_int("TRIAL_CUSTOMER_LIMIT", 40, 1, 100000),
+            pro_customer_limit=_bounded_int("PRO_CUSTOMER_LIMIT", 100, 1, 100000),
+            ultra_customer_limit=_bounded_int("ULTRA_CUSTOMER_LIMIT", 399, 1, 100000),
             admission_window_seconds=_bounded_int("ADMISSION_WINDOW_SECONDS", 86400, 60, 31536000),
             public_browser_fallback=os.getenv("PUBLIC_BROWSER_FALLBACK", "false").lower() == "true",
             yescale_api_key=os.getenv("YESCALE_API_KEY"),
             yescale_base_url=os.getenv("YESCALE_BASE_URL", "https://api.yescale.io/v1").rstrip("/"),
             yescale_model=os.getenv("YESCALE_MODEL", "gpt-4o-mini"),
             yescale_embedding_model=os.getenv("YESCALE_EMBEDDING_MODEL") or None,
+            sepay_api_key=os.getenv("SEPAY_API_KEY"),
+            payment_bank_name=os.getenv("PAYMENT_BANK_NAME", "MBBank"),
+            payment_bank_account=os.getenv("PAYMENT_BANK_ACCOUNT", "0123456789"),
+            payment_bank_account_holder=os.getenv("PAYMENT_BANK_ACCOUNT_HOLDER", "VCT CONNECT"),
         )
         if transport == "azure" and not (
             settings.azure_service_bus_queue and (

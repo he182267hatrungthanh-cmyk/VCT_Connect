@@ -6,7 +6,7 @@ from .storage_errors import CollectionConflict
 
 class CollectionStoreMixin:
     def begin_collection(self, analysis_id, user_id, payload, digest, *, customer_limit,
-                         trial_limit, window_seconds, guided=False):
+                         trial_limit, window_seconds, pro_limit: int | None = 100, guided=False):
         with self.connect() as conn:
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (str(analysis_id),))
             old = conn.execute("""SELECT a.user_id, j.initial_digest FROM extension_collection_jobs j
@@ -19,7 +19,7 @@ class CollectionStoreMixin:
             if conn.execute("SELECT id FROM analyses WHERE id=%s", (analysis_id,)).fetchone():
                 raise CollectionConflict("Collection identity conflicts")
             self._admit(conn, "CUSTOMER", str(user_id),
-                        self._customer_quota(conn, user_id, customer_limit, trial_limit), window_seconds)
+                        self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
             self._insert_analysis(conn, analysis_id, payload["source_url"], user_id, actor_type="CUSTOMER")
             conn.execute("""UPDATE analyses SET status='PROCESSING', mode='EXTENSION_ENHANCED',
                             extraction_method='EXTENSION_DOM', processing_claim_token=%s,

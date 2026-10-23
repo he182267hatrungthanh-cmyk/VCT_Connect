@@ -41,3 +41,29 @@ test("active MVP trial is visibly distinct from free", () => {
   assert.match(html, /ACTIVE/);
   assert.doesNotMatch(html, />Free</);
 });
+
+test("active Pro plan renders Pro indicators and 100 limit", () => {
+  const html = renderToStaticMarkup(<AccountStateView state={{
+    ...free,
+    plan: "PAID_PRO",
+    pro: {
+      active: true,
+      starts_at: "2026-10-01T00:00:00Z",
+      expires_at: "2026-10-31T00:00:00Z",
+    },
+    usage: {
+      used: 5,
+      limit: 100,
+      remaining: 95,
+      window_seconds: 86400,
+      starts_at: "2026-10-07T00:00:00Z",
+      resets_at: "2026-10-08T00:00:00Z",
+    },
+  }} />);
+  assert.match(html, /Pro \(100 lượt\/ngày\)/);
+  assert.match(html, /GÓI PRO/);
+  assert.match(html, /100 lượt phân tích \/ ngày/);
+  assert.match(html, /Còn 95 lượt/);
+  assert.doesNotMatch(html, />Free</);
+});
+

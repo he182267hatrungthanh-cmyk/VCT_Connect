@@ -187,7 +187,18 @@ export type AccountState = {
     email: string | null;
     role: "CUSTOMER";
   };
-  plan: "FREE" | "MVP_TRIAL";
+  plan: "FREE" | "MVP_TRIAL" | "PAID_PRO" | "PAID_ULTRA";
+  ultra?: {
+    active: boolean;
+    starts_at: string | null;
+    expires_at: string | null;
+  };
+  pro?: {
+    active: boolean;
+    starts_at: string | null;
+    expires_at: string | null;
+  };
+  bonus_limit?: number;
   trial: {
     active: boolean;
     starts_at: string | null;
@@ -202,6 +213,21 @@ export type AccountState = {
     starts_at: string;
     resets_at: string;
   };
+};
+
+export type PaymentOrder = {
+  order_code: string;
+  plan_code: string;
+  plan_name: string;
+  daily_limit: number;
+  amount: number;
+  currency: string;
+  bank_name: string;
+  bank_account: string;
+  bank_account_holder: string;
+  qr_url: string;
+  status: "PENDING" | "PAID" | "EXPIRED" | "CANCELLED";
+  expires_at: string;
 };
 
 

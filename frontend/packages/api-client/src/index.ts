@@ -1,5 +1,5 @@
 import type {
-  AccountState, AddWatchlistResponse, Analysis, AnalysisHistoryItem, CaptureAnalysisResponse, GuestPreviewV1, ImportSavedPageResponse, ReportV1, SubmitAnalysisRequest, SubmitAnalysisResponse, WatchlistEntry,
+  AccountState, AddWatchlistResponse, Analysis, AnalysisHistoryItem, CaptureAnalysisResponse, GuestPreviewV1, ImportSavedPageResponse, PaymentOrder, ReportV1, SubmitAnalysisRequest, SubmitAnalysisResponse, WatchlistEntry,
   SubmitGuestAnalysisRequest, SubmitGuestAnalysisResponse,
 } from "@vct/contracts";
 
@@ -219,6 +219,57 @@ export async function submitBrowserEvidence(
         ...await authorizationHeaders(auth),
       },
       body: serialized,
+    }),
+    options?.timeoutMs,
+  );
+}
+
+export async function createPaymentOrder(
+  planCode: string = "PRO_MONTHLY",
+  auth: RequestAuth,
+  options?: ApiRequestOptions,
+): Promise<PaymentOrder> {
+  return request<PaymentOrder>(
+    endpoint("/api/v1/payments/create-order", options),
+    async () => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...await authorizationHeaders(auth),
+      },
+      body: JSON.stringify({ plan_code: planCode }),
+    }),
+    options?.timeoutMs,
+  );
+}
+
+export async function getPaymentOrderStatus(
+  orderCode: string,
+  options?: ApiRequestOptions,
+): Promise<{ order_code: string; status: string; paid_at: string | null }> {
+  return request<{ order_code: string; status: string; paid_at: string | null }>(
+    endpoint(`/api/v1/payments/orders/${encodeURIComponent(orderCode)}/status`, options),
+    async () => ({
+      method: "GET",
+    }),
+    options?.timeoutMs,
+  );
+}
+
+export async function simulatePayment(
+  orderCode: string,
+  auth: RequestAuth,
+  options?: ApiRequestOptions,
+): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(
+    endpoint("/api/v1/payments/simulate-success", options),
+    async () => ({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...await authorizationHeaders(auth),
+      },
+      body: JSON.stringify({ order_code: orderCode }),
     }),
     options?.timeoutMs,
   );
