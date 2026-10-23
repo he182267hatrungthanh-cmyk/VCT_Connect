@@ -250,6 +250,21 @@ def build_assessment(
             "data_coverage": coverage,
         })
 
+    baseline_evidence = [
+        {
+            "evidence_id": sig.evidence_id,
+            "source_kind": sig.source_kind,
+            "source_field": None,
+            "payload": {
+                "statement_vi": sig.explanation,
+                "dimension": sig.dimension,
+                "severity": sig.severity,
+                "reliability": sig.reliability,
+            },
+        }
+        for sig in baseline_signals.values()
+    ]
+
     return AssessmentBundle(
         supplier_run=supplier_run,
         review_analysis=review_analysis,
@@ -267,5 +282,6 @@ def build_assessment(
             review_evidence,
             media_evidence,
             identity_evidence,
+            baseline_evidence,
         ),
     )
