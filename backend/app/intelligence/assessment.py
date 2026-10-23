@@ -24,6 +24,7 @@ from .identity import FactoryTraderAssessment, assess_supplier_identity
 from .interpretation import InterpretationRun, interpret_supplier_data
 from .media import MediaInterpretationRun, ReviewMediaInput, interpret_review_media
 from .provider import EmbeddingProvider, LLMProvider, MultimodalLLMProvider
+from .reviews import ReviewAnalysis, analyze_review_signals
 from .scoring import (
     CURRENT_DIMENSION_WEIGHTS,
     CURRENT_SCORING_VERSION,
@@ -33,6 +34,7 @@ from .scoring import (
     RiskSignal,
     score_supplier_risk,
 )
+from .semantic_reviews import SemanticReviewRun, interpret_reviews
 
 
 @dataclass(frozen=True)
