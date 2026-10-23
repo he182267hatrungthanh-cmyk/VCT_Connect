@@ -319,17 +319,7 @@ export default function Page() {
     window.history.replaceState(null, "", `${next.pathname}${next.search}${next.hash}`);
     setView("analysis");
     setId(item.id);
-    setReopenVersion(version => version + 1);
-    setAnalysis({
-      id: item.id,
-      source_url: item.source_url,
-      attempt_count: 1,
-      failure_code: null,
-      extraction_method: item.extraction_method,
-      status: item.status,
-      created_at: item.created_at,
-      result: null,
-    });
+    setAnalysis(null);
     setError("");
     setDelayed(false);
     setRequestedMethod(item.extraction_method);
