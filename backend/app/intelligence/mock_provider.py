@@ -8,6 +8,7 @@ from __future__ import annotations
 from decimal import Decimal
 import json
 from typing import Mapping
+from uuid import uuid4
 
 from .contracts import SCHEMA_VERSION
 from .provider import EmbeddingResponse, ProviderResponse, ProviderUsage
@@ -154,7 +155,7 @@ class SmartMockProvider:
 
         return ProviderResponse(
             provider=self.provider_name,
-            request_id=f"smart-mock-{self.chat_calls}",
+            request_id=f"smart-mock-{uuid4().hex[:12]}-{self.chat_calls}",
             requested_model=model,
             response_model=response_model,
             content=json.dumps(output, ensure_ascii=False),
@@ -179,7 +180,7 @@ class SmartMockProvider:
         )
         return EmbeddingResponse(
             provider=self.provider_name,
-            request_id=f"embed-{self.embedding_calls}",
+            request_id=f"embed-{uuid4().hex[:12]}-{self.embedding_calls}",
             requested_model=kwargs.get("model", "mock-embed"),
             response_model="smart-mock-embedding-v1",
             vectors=vectors,
