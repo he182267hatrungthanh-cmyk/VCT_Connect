@@ -139,7 +139,7 @@ def main():
             identity = hashlib.sha256(base64.b64decode(manifest["key"])).hexdigest()[:32]
             extension_id = "".join(chr(ord("a") + int(character, 16)) for character in identity)
             assert extension_id == "klggcepemjjbphjclpiabgpfgdbgiljj"
-            assert "https://vct-connect-dev-web.blackdesert-0144dda1.southeastasia.azurecontainerapps.io/*" in manifest["host_permissions"]
+            assert "https://vct-connect.io.vn/*" in manifest["host_permissions"]
             assert not any("127.0.0.1" in host or "localhost" in host for host in manifest["host_permissions"])
         # Private files are never public Next/static assets.
         for path in ["/private/vct-connect-extension.zip", "/extension/vct-connect-extension.zip"]:

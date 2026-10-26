@@ -13,7 +13,13 @@ function localPublishableKey(text) {
 }
 
 const localEnv = await readFile(resolve(directory, "../web/.env.local"), "utf8").catch(() => "");
-const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || localPublishableKey(localEnv);
+const webOrigin = new URL(process.env.VCT_WEB_ORIGIN || process.env.VCT_EXTENSION_WEB_ORIGIN || "https://vct-connect.io.vn").origin;
+if (!/^https?:\/\//.test(webOrigin)) throw new Error("VCT_WEB_ORIGIN must be HTTP(S)");
+
+const isProdWeb = webOrigin.includes("vct-connect.io.vn") || webOrigin.includes("onrender.com");
+const localEnvKey = localPublishableKey(localEnv);
+const defaultKey = isProdWeb ? "pk_live_Y2xlcmsudmN0LWNvbm5lY3QuaW8udm4k" : (localEnvKey || "pk_test_c2hpbmluZy1ob3JzZS00MDQ3LmNsZXJrLmFjY291bnRzLmRldiQ");
+const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || defaultKey;
 if (!publishableKey || !/^pk_(test|live)_[A-Za-z0-9_-]+$/.test(publishableKey)) {
   throw new Error("Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to build the extension");
 }
@@ -22,8 +28,6 @@ const clerkHost = Buffer.from(encodedHost, "base64url").toString("utf8").replace
 if (!/^[a-z0-9.-]+$/i.test(clerkHost) || !clerkHost.includes(".")) {
   throw new Error("Invalid Clerk publishable key host");
 }
-const webOrigin = new URL(process.env.VCT_WEB_ORIGIN || "http://127.0.0.1:3000").origin;
-if (!/^https?:\/\//.test(webOrigin)) throw new Error("VCT_WEB_ORIGIN must be HTTP(S)");
 // Development Clerk cookies live on the web host; production client cookies
 // live on the Clerk Frontend API host (Clerk's Sync Host integration).
 const syncHost = publishableKey.startsWith("pk_test_") ? webOrigin : `https://${clerkHost}`;
@@ -36,7 +40,15 @@ const manifest = {
   icons: { 16: "icon.png", 32: "icon.png", 48: "icon.png", 128: "icon.png" },
   key: publicKey,
   permissions: ["activeTab", "scripting", "cookies", "storage", "downloads", "tabs"],
-  host_permissions: [`${webOrigin}/*`, `https://${clerkHost}/*`, "https://*.1688.com/*", "https://*.alibaba.com/*"],
+  host_permissions: Array.from(new Set([
+    `${webOrigin}/*`,
+    "https://vct-connect.io.vn/*",
+    "https://vct-connect-3mly.onrender.com/*",
+    `https://${clerkHost}/*`,
+    "https://clerk.vct-connect.io.vn/*",
+    "https://*.1688.com/*",
+    "https://*.alibaba.com/*",
+  ])),
   optional_host_permissions: ["https://*.1688.com/*", "https://*.alibaba.com/*"],
   background: { service_worker: "background.js", type: "module" },
   action: { default_popup: "popup.html", default_title: "VCT Connect · Thu thập bằng chứng",

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createZip } from "./zip.mjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
-const origin = new URL(process.env.VCT_EXTENSION_WEB_ORIGIN || "https://vct-connect-dev-web.blackdesert-0144dda1.southeastasia.azurecontainerapps.io");
+const origin = new URL(process.env.VCT_EXTENSION_WEB_ORIGIN || process.env.VCT_WEB_ORIGIN || "https://vct-connect.io.vn");
 if (origin.protocol !== "https:" || origin.username || origin.password || /^(localhost|127\.|\[::1\])/.test(origin.hostname)) {
   throw new Error("The downloadable extension requires a deployed HTTPS web origin");
 }
