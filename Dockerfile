@@ -19,8 +19,10 @@ COPY frontend/ ./
 # Build arguments for Clerk & extension origin
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_Y2xlcmsudmN0LWNvbm5lY3QuaW8udm4k
 ARG VCT_EXTENSION_WEB_ORIGIN=https://vct-connect.io.vn
+ARG NEXT_PUBLIC_GA_ID=G-MDD2QQZP4L
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV VCT_EXTENSION_WEB_ORIGIN=$VCT_EXTENSION_WEB_ORIGIN
+ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 
 # Build standalone Next.js web application
 RUN npm run build -w @vct/web

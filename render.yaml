@@ -33,4 +33,6 @@ services:
         value: https://vct-connect.io.vn
       - key: CLERK_AUDIENCE
         value: vct-connect-api
+      - key: NEXT_PUBLIC_GA_ID
+        value: G-MDD2QQZP4L
 

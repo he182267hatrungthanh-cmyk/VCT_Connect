@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { viVN } from "@clerk/localizations";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import GoogleAnalytics from "./google-analytics";
 import "./style.css";
 
 export const metadata: Metadata = {
@@ -12,5 +13,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#09234c" };
 
 export default function Layout({ children }: { children: ReactNode }) {
-  return <html lang="vi"><body><ClerkProvider localization={viVN}>{children}</ClerkProvider></body></html>;
+  return (
+    <html lang="vi">
+      <body>
+        <ClerkProvider localization={viVN}>
+          <GoogleAnalytics />
+          {children}
+        </ClerkProvider>
+      </body>
+    </html>
+  );
 }
