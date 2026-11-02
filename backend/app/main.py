@@ -183,7 +183,7 @@ def create_app(
                 trial_limit=settings.trial_customer_limit,
                 pro_limit=settings.pro_customer_limit,
                 ultra_limit=settings.ultra_customer_limit,
-                window_seconds=settings.admission_window_seconds,
+                window_seconds=settings.customer_weekly_window_seconds,
             )
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
@@ -247,7 +247,8 @@ def create_app(
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
                 pro_limit=settings.pro_customer_limit,
-                window_seconds=settings.admission_window_seconds,
+                ultra_limit=settings.ultra_customer_limit,
+                window_seconds=settings.customer_weekly_window_seconds,
             )
         except AdmissionDenied as exc:
             raise HTTPException(status_code=429, detail="Submission limit reached") from exc
@@ -318,7 +319,8 @@ def create_app(
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
                 pro_limit=settings.pro_customer_limit,
-                window_seconds=settings.admission_window_seconds,
+                ultra_limit=settings.ultra_customer_limit,
+                window_seconds=settings.customer_weekly_window_seconds,
                 azure=settings.queue_transport == "azure",
             )
         except AdmissionDenied as exc:
@@ -372,7 +374,8 @@ def create_app(
                 customer_limit=settings.customer_limit,
                 trial_limit=settings.trial_customer_limit,
                 pro_limit=settings.pro_customer_limit,
-                window_seconds=settings.admission_window_seconds,
+                ultra_limit=settings.ultra_customer_limit,
+                window_seconds=settings.customer_weekly_window_seconds,
                 azure=settings.queue_transport == "azure",
             )
         except AdmissionDenied as exc:

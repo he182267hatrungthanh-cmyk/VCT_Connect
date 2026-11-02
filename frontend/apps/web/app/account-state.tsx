@@ -105,13 +105,13 @@ export function AccountStateView({
               <dt>Gói hiện tại</dt>
               <dd>
                 {isUltra ? (
-                  <strong style={{ color: "#7c3aed" }}>Ultra (399 lượt/ngày)</strong>
+                  <strong style={{ color: "#7c3aed" }}>Ultra (399 lượt/tuần)</strong>
                 ) : isPro ? (
-                  <strong style={{ color: "var(--brand-blue)" }}>Pro (100 lượt/ngày)</strong>
+                  <strong style={{ color: "var(--brand-blue)" }}>Pro (100 lượt/tuần)</strong>
                 ) : trial ? (
                   "MVP Trial"
                 ) : (
-                  "Free"
+                  "Free (20 lượt vĩnh viễn)"
                 )}
               </dd>
             </div>
@@ -128,7 +128,7 @@ export function AccountStateView({
             <dl>
               <div><dt>Bắt đầu</dt><dd>{dateTime(state.ultra?.starts_at ?? null)}</dd></div>
               <div><dt>Hết hạn</dt><dd>{dateTime(state.ultra?.expires_at ?? null)}</dd></div>
-              <div><dt>Hạn mức</dt><dd>399 lượt phân tích / ngày</dd></div>
+              <div><dt>Hạn mức</dt><dd>399 lượt phân tích / tuần (làm mới mỗi tuần)</dd></div>
             </dl>
             <p className="account-safety-note" style={{ color: "#7c3aed" }}>
               Bạn đang sử dụng gói cao cấp nhất của VCT Connect!
@@ -141,16 +141,16 @@ export function AccountStateView({
             <dl>
               <div><dt>Bắt đầu</dt><dd>{dateTime(state.pro?.starts_at ?? null)}</dd></div>
               <div><dt>Hết hạn</dt><dd>{dateTime(state.pro?.expires_at ?? null)}</dd></div>
-              <div><dt>Hạn mức</dt><dd>100 lượt phân tích / ngày</dd></div>
+              <div><dt>Hạn mức</dt><dd>100 lượt phân tích / tuần (làm mới mỗi tuần)</dd></div>
             </dl>
             <p className="account-safety-note" style={{ color: "var(--brand-blue)" }}>
               Cảm ơn bạn đã đồng hành cùng VCT Connect!
             </p>
           </article>
-        ) : (
+        ) : trial ? (
           <article className="account-card">
             <span className="card-label">MVP TRIAL</span>
-            <h2>{trial ? "Đang hoạt động" : "Chưa hoạt động"}</h2>
+            <h2>Đang hoạt động</h2>
             <dl>
               <div><dt>Bắt đầu</dt><dd>{dateTime(state.trial.starts_at)}</dd></div>
               <div><dt>Hết hạn</dt><dd>{dateTime(state.trial.expires_at)}</dd></div>
@@ -158,14 +158,33 @@ export function AccountStateView({
             </dl>
             <p className="account-safety-note">MVP hiện không tự động thu phí và không tự động gia hạn khi trial kết thúc.</p>
           </article>
+        ) : (
+          <article className="account-card">
+            <span className="card-label">GÓI MIỄN PHÍ</span>
+            <h2>Dùng thử trọn đời</h2>
+            <dl>
+              <div><dt>Hạn mức</dt><dd>20 lượt phân tích vĩnh viễn</dd></div>
+              <div><dt>Chu kỳ làm mới</dt><dd>Không (chỉ tặng 20 lượt ban đầu)</dd></div>
+            </dl>
+            <p className="account-safety-note">Dùng hết 20 lượt bạn vui lòng nâng cấp gói Pro hoặc Ultra để tiếp tục sử dụng.</p>
+          </article>
         )}
 
         <article className="account-card account-usage-card">
           <span className="card-label">LƯỢT PHÂN TÍCH</span>
           <div className="account-usage-value"><strong>{state.usage.used}</strong><span>/ {state.usage.limit}</span></div>
           <div className="report-meter"><i style={{ width: `${usagePercent}%` }} /></div>
-          <p>Còn {state.usage.remaining} lượt trong cửa sổ sử dụng hiện tại.</p>
-          <small>Làm mới lúc {dateTime(state.usage.resets_at)}</small>
+          {state.plan === "FREE" ? (
+            <>
+              <p>Còn {state.usage.remaining} lượt trong gói dùng thử 20 lượt trọn đời.</p>
+              <small>Hạn mức vĩnh viễn (không làm mới định kỳ)</small>
+            </>
+          ) : (
+            <>
+              <p>Còn {state.usage.remaining} lượt trong tuần sử dụng hiện tại.</p>
+              <small>Làm mới theo tuần lúc {dateTime(state.usage.resets_at)}</small>
+            </>
+          )}
         </article>
       </div>
 
@@ -213,7 +232,7 @@ export function AccountStateView({
                   49.000 đ <small>/ 30 ngày</small>
                 </div>
                 <ul className="pricing-card-features">
-                  <li><strong>100 lượt / 24h</strong> mỗi ngày</li>
+                  <li><strong>100 lượt / tuần</strong> (làm mới mỗi tuần trong 30 ngày)</li>
                   <li>Hạn dùng 30 ngày</li>
                   <li>Hỗ trợ phân tích 1688 & Alibaba</li>
                   <li>Lưu trữ lịch sử & Watchlist</li>
@@ -240,7 +259,7 @@ export function AccountStateView({
                   299.000 đ <small>/ 30 ngày</small>
                 </div>
                 <ul className="pricing-card-features">
-                  <li><strong>399 lượt / 24h</strong> phân tích tối đa</li>
+                  <li><strong>399 lượt / tuần</strong> (làm mới mỗi tuần trong 30 ngày)</li>
                   <li>Hạn dùng 30 ngày</li>
                   <li>Ưu tiên hàng đợi trích xuất siêu tốc</li>
                   <li>Đầy đủ trích xuất chuyên sâu & báo cáo</li>

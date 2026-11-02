@@ -143,6 +143,38 @@ class Store(CollectionStoreMixin):
             base = trial_limit if cls._trial_active(conn, user_id) else free_limit
         return base + bonus
 
+    @classmethod
+    def _admit_customer(
+        cls, conn, user_id: UUID, *, customer_limit: int,
+        trial_limit: int | None = None, pro_limit: int | None = 100,
+        ultra_limit: int | None = 399, window_seconds: int = 604800,
+    ) -> None:
+        bonus = cls._topup_bonus(conn, user_id)
+        if cls._ultra_active(conn, user_id):
+            limit = (ultra_limit or 399) + bonus
+            cls._admit(conn, "CUSTOMER", str(user_id), limit, window_seconds)
+        elif cls._pro_active(conn, user_id):
+            limit = (pro_limit or 100) + bonus
+            cls._admit(conn, "CUSTOMER", str(user_id), limit, window_seconds)
+        elif trial_limit is not None and cls._trial_active(conn, user_id):
+            limit = trial_limit + bonus
+            cls._admit(conn, "CUSTOMER", str(user_id), limit, window_seconds)
+        else:
+            # Free plan: 20 lifetime uses (vinh vien, window_number = 0)
+            free_limit = customer_limit + bonus
+            row = conn.execute(
+                """INSERT INTO admission_counters (scope, subject, window_number, used)
+                   VALUES ('CUSTOMER', %s, 0, 1)
+                   ON CONFLICT (scope, subject, window_number)
+                   DO UPDATE SET used = admission_counters.used + 1
+                     WHERE admission_counters.used < %s
+                   RETURNING used""",
+                (str(user_id), free_limit),
+            ).fetchone()
+            if row is None:
+                raise AdmissionDenied("Submission limit reached")
+
+
     def get_account_state(
         self, user_id: UUID, *, customer_limit: int, window_seconds: int,
         trial_limit: int | None = None, pro_limit: int | None = 100,
@@ -151,7 +183,7 @@ class Store(CollectionStoreMixin):
         """Return the signed-in customer's current plan, trial, pro, ultra and admission usage."""
         with self.connect() as conn:
             user = conn.execute(
-                """SELECT id, clerk_user_id, email, role
+                """SELECT id, clerk_user_id, email, role, created_at
                    FROM users WHERE id = %s""",
                 (user_id,),
             ).fetchone()
@@ -206,33 +238,53 @@ class Store(CollectionStoreMixin):
                 (user_id,),
             ).fetchone()
             bonus = self._topup_bonus(conn, user_id)
-            usage = conn.execute(
-                """WITH current_window AS (
-                     SELECT floor(extract(epoch FROM now()) / %s)::bigint AS n
-                   )
-                   SELECT COALESCE(ac.used, 0)::int AS used,
-                          to_timestamp(cw.n * %s) AS starts_at,
-                          to_timestamp((cw.n + 1) * %s) AS resets_at
-                   FROM current_window cw
-                   LEFT JOIN admission_counters ac
-                     ON ac.scope = 'CUSTOMER'
-                    AND ac.subject = %s
-                    AND ac.window_number = cw.n""",
-                (window_seconds, window_seconds, window_seconds, str(user_id)),
-            ).fetchone()
-        used = int(usage["used"])
-        if ultra and ultra["active"]:
-            effective_limit = (ultra_limit or 399) + bonus
-            current_plan = "PAID_ULTRA"
-        elif pro and pro["active"]:
-            effective_limit = (pro_limit or 100) + bonus
-            current_plan = "PAID_PRO"
-        elif trial and trial["active"] and trial_limit is not None:
-            effective_limit = trial_limit + bonus
-            current_plan = "MVP_TRIAL"
-        else:
-            effective_limit = customer_limit + bonus
-            current_plan = "FREE"
+            if ultra and ultra["active"]:
+                effective_limit = (ultra_limit or 399) + bonus
+                current_plan = "PAID_ULTRA"
+                is_free = False
+            elif pro and pro["active"]:
+                effective_limit = (pro_limit or 100) + bonus
+                current_plan = "PAID_PRO"
+                is_free = False
+            elif trial and trial["active"] and trial_limit is not None:
+                effective_limit = trial_limit + bonus
+                current_plan = "MVP_TRIAL"
+                is_free = False
+            else:
+                effective_limit = customer_limit + bonus
+                current_plan = "FREE"
+                is_free = True
+
+            if is_free:
+                free_counter = conn.execute(
+                    """SELECT COALESCE(used, 0)::int AS used
+                       FROM admission_counters
+                       WHERE scope = 'CUSTOMER' AND subject = %s AND window_number = 0""",
+                    (str(user_id),),
+                ).fetchone()
+                used = int(free_counter["used"]) if free_counter else 0
+                starts_at = user["created_at"].isoformat() if user and "created_at" in user and hasattr(user["created_at"], "isoformat") else (str(user.get("created_at") or "") if user else "")
+                resets_at = None
+                effective_window = 0
+            else:
+                effective_window = window_seconds
+                usage = conn.execute(
+                    """WITH current_window AS (
+                         SELECT floor(extract(epoch FROM now()) / %s)::bigint AS n
+                       )
+                       SELECT COALESCE(ac.used, 0)::int AS used,
+                              to_timestamp(cw.n * %s) AS starts_at,
+                              to_timestamp((cw.n + 1) * %s) AS resets_at
+                       FROM current_window cw
+                       LEFT JOIN admission_counters ac
+                         ON ac.scope = 'CUSTOMER'
+                        AND ac.subject = %s
+                        AND ac.window_number = cw.n""",
+                    (effective_window, effective_window, effective_window, str(user_id)),
+                ).fetchone()
+                used = int(usage["used"])
+                starts_at = usage["starts_at"].isoformat() if hasattr(usage["starts_at"], "isoformat") else str(usage["starts_at"])
+                resets_at = usage["resets_at"].isoformat() if hasattr(usage["resets_at"], "isoformat") else str(usage["resets_at"])
 
         return {
             "user": {
@@ -262,9 +314,9 @@ class Store(CollectionStoreMixin):
                 "used": used,
                 "limit": effective_limit,
                 "remaining": max(effective_limit - used, 0),
-                "window_seconds": window_seconds,
-                "starts_at": usage["starts_at"],
-                "resets_at": usage["resets_at"],
+                "window_seconds": effective_window if 'effective_window' in locals() else window_seconds,
+                "starts_at": starts_at,
+                "resets_at": resets_at,
             },
         }
 
@@ -319,8 +371,9 @@ class Store(CollectionStoreMixin):
         self, source_url: str, user_id: UUID | None, *, azure: bool,
         guest_key_hash: str | None = None, actor_type: str = "LEGACY",
         browser_limit: int | None = None, global_limit: int | None = None,
-        customer_limit: int | None = None, window_seconds: int = 86400,
+        customer_limit: int | None = None, window_seconds: int = 604800,
         trial_limit: int | None = None, pro_limit: int | None = 100,
+        ultra_limit: int | None = 399,
     ) -> UUID:
         analysis_id = uuid4()
         with self.connect() as conn:
@@ -331,8 +384,12 @@ class Store(CollectionStoreMixin):
                     self._admit(conn, "GUEST_GLOBAL", "all", global_limit, window_seconds)
                 elif actor_type == "CUSTOMER":
                     assert user_id is not None and customer_limit is not None
-                    self._admit(conn, "CUSTOMER", str(user_id),
-                                self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
+                    self._admit_customer(
+                        conn, user_id, customer_limit=customer_limit,
+                        trial_limit=trial_limit, pro_limit=pro_limit,
+                        ultra_limit=ultra_limit if 'ultra_limit' in locals() else 399,
+                        window_seconds=window_seconds,
+                    )
                 self._insert_analysis(
                     conn, analysis_id, source_url, user_id,
                     guest_key_hash=guest_key_hash, actor_type=actor_type,
@@ -365,13 +422,13 @@ class Store(CollectionStoreMixin):
 
     def submit_customer(
         self, source_url: str, user_id: UUID, *, azure: bool,
-        customer_limit: int, window_seconds: int, trial_limit: int | None = None,
-        pro_limit: int | None = 100,
+        customer_limit: int, window_seconds: int = 604800, trial_limit: int | None = None,
+        pro_limit: int | None = 100, ultra_limit: int | None = 399,
     ) -> UUID:
         return self._submit(
             source_url, user_id, azure=azure, actor_type="CUSTOMER",
             customer_limit=customer_limit, window_seconds=window_seconds,
-            trial_limit=trial_limit, pro_limit=pro_limit,
+            trial_limit=trial_limit, pro_limit=pro_limit, ultra_limit=ultra_limit,
         )
 
     _SELECT = """
@@ -824,8 +881,12 @@ class Store(CollectionStoreMixin):
         token = uuid4()
         with self.connect() as conn:
             with conn.transaction():
-                self._admit(conn, "CUSTOMER", str(user_id),
-                            self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
+                self._admit_customer(
+                    conn, user_id, customer_limit=customer_limit,
+                    trial_limit=trial_limit, pro_limit=pro_limit,
+                    ultra_limit=ultra_limit if 'ultra_limit' in locals() else 399,
+                    window_seconds=window_seconds,
+                )
                 self._insert_analysis(conn, analysis_id, source_url, user_id, actor_type="CUSTOMER")
                 conn.execute(
                     """UPDATE analyses SET status = 'PROCESSING', attempt_count = 1,
@@ -870,8 +931,12 @@ class Store(CollectionStoreMixin):
         token = uuid4()
         with self.connect() as conn:
             with conn.transaction():
-                self._admit(conn, "CUSTOMER", str(user_id),
-                            self._customer_quota(conn, user_id, customer_limit, trial_limit, pro_limit), window_seconds)
+                self._admit_customer(
+                    conn, user_id, customer_limit=customer_limit,
+                    trial_limit=trial_limit, pro_limit=pro_limit,
+                    ultra_limit=ultra_limit if 'ultra_limit' in locals() else 399,
+                    window_seconds=window_seconds,
+                )
                 previous = conn.execute(
                     """SELECT s.id AS supplier_snapshot_id, s.normalized_data AS supplier_data,
                               s.raw_payload AS raw_payload
@@ -952,8 +1017,12 @@ class Store(CollectionStoreMixin):
                 if (revised["platform"] != source["supplier_platform"]
                         or revised["platform_supplier_id"] != source["platform_supplier_id"]):
                     raise UnsupportedRawEvidence("Replay cannot change supplier identity")
-                self._admit(conn, "CUSTOMER", str(user_id),
-                            self._customer_quota(conn, user_id, customer_limit, trial_limit), window_seconds)
+                self._admit_customer(
+                    conn, user_id, customer_limit=customer_limit,
+                    trial_limit=trial_limit, pro_limit=pro_limit if 'pro_limit' in locals() else 100,
+                    ultra_limit=ultra_limit if 'ultra_limit' in locals() else 399,
+                    window_seconds=window_seconds,
+                )
                 analysis_id, token = uuid4(), uuid4()
                 self._insert_analysis(conn, analysis_id, source["source_url"], user_id, actor_type="CUSTOMER")
                 conn.execute(

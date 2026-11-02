@@ -18,17 +18,20 @@ class SimulatePaymentRequest(BaseModel):
 PLAN_PRICING = {
     "PRO_MONTHLY": {
         "amount": 49000,
-        "name": "VCT Connect Pro (100 lượt/24h - 30 ngày)",
+        "name": "VCT Connect Pro (100 lượt/tuần - 30 ngày)",
+        "weekly_limit": 100,
         "daily_limit": 100,
     },
     "TOPUP_50": {
         "amount": 29000,
         "name": "Gói Nạp Lượt Top-Up (+50 lượt - 30 ngày)",
+        "weekly_limit": 50,
         "daily_limit": 50,
     },
     "ULTRA_MONTHLY": {
         "amount": 299000,
-        "name": "VCT Connect Ultra (399 lượt/24h - 30 ngày)",
+        "name": "VCT Connect Ultra (399 lượt/tuần - 30 ngày)",
+        "weekly_limit": 399,
         "daily_limit": 399,
     },
 }
@@ -136,6 +139,7 @@ def register_payment_routes(app, store, settings, customer_dependency):
             "plan_code": order["plan_code"],
             "plan_name": plan["name"],
             "daily_limit": plan["daily_limit"],
+            "weekly_limit": plan.get("weekly_limit", plan["daily_limit"]),
             "amount": order["amount"],
             "currency": "VND",
             "bank_name": settings.payment_bank_name,

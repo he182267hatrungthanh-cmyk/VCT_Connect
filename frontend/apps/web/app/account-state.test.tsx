@@ -10,19 +10,19 @@ const free: AccountState = {
   plan: "FREE",
   trial: { active: false, starts_at: null, expires_at: null, status: null },
   usage: {
-    used: 2, limit: 20, remaining: 18, window_seconds: 86400,
-    starts_at: "2026-10-07T00:00:00Z", resets_at: "2026-10-08T00:00:00Z",
+    used: 2, limit: 20, remaining: 18, window_seconds: 0,
+    starts_at: "2026-10-07T00:00:00Z", resets_at: null,
   },
 };
 
 test("account state renders free plan and real usage without inventing a trial", () => {
   const html = renderToStaticMarkup(<AccountStateView state={free} />);
   assert.match(html, /owner@example.test/);
-  assert.match(html, />Free</);
+  assert.match(html, /Free \(20 lượt vĩnh viễn\)/);
   assert.match(html, /2/);
   assert.match(html, /20/);
   assert.match(html, /Còn 18 lượt/);
-  assert.match(html, /không tự động thu phí/);
+  assert.match(html, /Hạn mức vĩnh viễn/);
 });
 
 test("active MVP trial is visibly distinct from free", () => {
@@ -55,14 +55,14 @@ test("active Pro plan renders Pro indicators and 100 limit", () => {
       used: 5,
       limit: 100,
       remaining: 95,
-      window_seconds: 86400,
+      window_seconds: 604800,
       starts_at: "2026-10-07T00:00:00Z",
-      resets_at: "2026-10-08T00:00:00Z",
+      resets_at: "2026-10-14T00:00:00Z",
     },
   }} />);
-  assert.match(html, /Pro \(100 lượt\/ngày\)/);
+  assert.match(html, /Pro \(100 lượt\/tuần\)/);
   assert.match(html, /GÓI PRO/);
-  assert.match(html, /100 lượt phân tích \/ ngày/);
+  assert.match(html, /100 lượt phân tích \/ tuần/);
   assert.match(html, /Còn 95 lượt/);
   assert.doesNotMatch(html, />Free</);
 });

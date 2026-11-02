@@ -211,7 +211,7 @@ export type AccountState = {
     remaining: number;
     window_seconds: number;
     starts_at: string;
-    resets_at: string;
+    resets_at: string | null;
   };
 };
 
