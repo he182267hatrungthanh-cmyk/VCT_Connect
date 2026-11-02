@@ -82,6 +82,10 @@ class Store(CollectionStoreMixin):
             (user_id,),
         ).fetchone()["active"])
 
+    def is_pro_active(self, user_id: UUID) -> bool:
+        with self.connect() as conn:
+            return self._pro_active(conn, user_id)
+
     @staticmethod
     def _pro_active(conn, user_id: UUID) -> bool:
         return bool(conn.execute(
@@ -1349,6 +1353,15 @@ class Store(CollectionStoreMixin):
                 # Determine entitlement source from plan_code
                 if order["plan_code"] == "ULTRA_MONTHLY":
                     source = "PAID_ULTRA"
+                    # Mark any previous active PRO entitlement as SUPERSEDED so Ultra takes full precedence
+                    conn.execute(
+                        """UPDATE entitlements
+                           SET status = 'SUPERSEDED'
+                           WHERE user_id = %s
+                             AND source = 'PAID_PRO'
+                             AND status = 'ACTIVE'""",
+                        (order["user_id"],),
+                    )
                 elif order["plan_code"] == "TOPUP_50":
                     source = "TOPUP_50"
                 else:

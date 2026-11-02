@@ -67,3 +67,25 @@ test("active Pro plan renders Pro indicators and 100 limit", () => {
   assert.doesNotMatch(html, />Free</);
 });
 
+test("active Pro plan shows prorated Ultra upgrade price (250k)", () => {
+  const html = renderToStaticMarkup(<AccountStateView state={{
+    ...free,
+    plan: "PAID_PRO",
+    pro: {
+      active: true,
+      starts_at: "2026-10-01T00:00:00Z",
+      expires_at: "2026-10-31T00:00:00Z",
+    },
+    usage: {
+      used: 5,
+      limit: 100,
+      remaining: 95,
+      window_seconds: 604800,
+      starts_at: "2026-10-07T00:00:00Z",
+      resets_at: "2026-10-14T00:00:00Z",
+    },
+  }} getToken={async () => "token"} />);
+  assert.match(html, /250\.000 đ/);
+  assert.match(html, /Ưu đãi bù chênh lệch từ gói Pro/);
+  assert.match(html, /Nâng cấp lên Ultra \(Bù 250k\)/);
+});

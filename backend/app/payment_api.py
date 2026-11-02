@@ -107,6 +107,20 @@ def register_payment_routes(app, store, settings, customer_dependency):
         if not plan:
             raise HTTPException(400, "Unsupported plan code")
 
+        # Check if user has active PRO and wants to upgrade to ULTRA (prorated discount 250k)
+        is_pro = False
+        try:
+            is_pro = await run_in_threadpool(store.is_pro_active, principal.user_id)
+        except Exception:
+            pass
+
+        effective_amount = plan["amount"]
+        plan_name = plan["name"]
+        if body.plan_code == "ULTRA_MONTHLY" and is_pro:
+            # Upgrade from PRO to ULTRA: pay difference of 250,000 VND instead of 299,000 VND
+            effective_amount = 250000
+            plan_name = "VCT Connect Ultra (Nâng cấp từ Pro - Bù 250.000 đ)"
+
         # Generate a distinct 6-digit order code with VCT prefix, e.g. VCT684920
         order_code = f"VCT{random.randint(100000, 999999)}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
@@ -116,7 +130,7 @@ def register_payment_routes(app, store, settings, customer_dependency):
                 store.create_payment_order,
                 user_id=principal.user_id,
                 plan_code=body.plan_code,
-                amount=plan["amount"],
+                amount=effective_amount,
                 order_code=order_code,
                 expires_at=expires_at,
                 gateway="SEPAY",
@@ -131,13 +145,13 @@ def register_payment_routes(app, store, settings, customer_dependency):
         qr_url = (
             f"https://img.vietqr.io/image/{bank_code}-"
             f"{clean_account}-compact2.png"
-            f"?amount={plan['amount']}&addInfo={order_code}&accountName={account_name_encoded}"
+            f"?amount={effective_amount}&addInfo={order_code}&accountName={account_name_encoded}"
         )
 
         return {
             "order_code": order["order_code"],
             "plan_code": order["plan_code"],
-            "plan_name": plan["name"],
+            "plan_name": plan_name,
             "daily_limit": plan["daily_limit"],
             "weekly_limit": plan.get("weekly_limit", plan["daily_limit"]),
             "amount": order["amount"],
@@ -227,16 +241,22 @@ def register_payment_routes(app, store, settings, customer_dependency):
         principal=Depends(customer_dependency),
     ):
         """Allows testing / demoing payment fulfillment immediately."""
+        order = await run_in_threadpool(store.get_payment_order, body.order_code)
+        if not order:
+            raise HTTPException(404, "Order not found")
+
         fulfilled = await run_in_threadpool(
             store.fulfill_payment_order,
             order_code=body.order_code,
             gateway_transaction_id="DEMO_SIMULATION",
+            paid_amount=order["amount"],
         )
         if not fulfilled:
-            raise HTTPException(400, "Order not found or could not be fulfilled")
+            raise HTTPException(400, "Order could not be fulfilled")
 
+        target_plan = "Ultra" if order.get("plan_code") == "ULTRA_MONTHLY" else ("Top-up" if order.get("plan_code") == "TOPUP_50" else "Pro")
         return {
             "success": True,
             "order_code": body.order_code,
-            "message": "Đã giả lập thanh toán thành công! Tài khoản đã được nâng cấp lên Pro.",
+            "message": f"Đã giả lập thanh toán thành công! Tài khoản đã được nâng cấp lên {target_plan}.",
         }

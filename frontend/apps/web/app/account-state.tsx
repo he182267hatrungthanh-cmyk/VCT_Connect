@@ -241,9 +241,11 @@ export function AccountStateView({
               <button
                 type="button"
                 className="pricing-btn pricing-btn-primary"
+                disabled={isPro || isUltra}
+                style={(isPro || isUltra) ? { opacity: 0.65, cursor: "default" } : undefined}
                 onClick={() => void handleStartUpgrade("PRO_MONTHLY")}
               >
-                Nâng cấp gói Pro ➔
+                {isPro ? "Gói Pro đang kích hoạt ✓" : isUltra ? "Bạn đang ở gói Ultra VIP" : "Nâng cấp gói Pro ➔"}
               </button>
             </article>
 
@@ -256,7 +258,18 @@ export function AccountStateView({
                   Dành cho shop lớn, đội ngũ kinh doanh & doanh nghiệp
                 </p>
                 <div className="pricing-card-price">
-                  299.000 đ <small>/ 30 ngày</small>
+                  {isPro ? (
+                    <>
+                      250.000 đ <small>/ 30 ngày</small>
+                      <span style={{ display: "block", fontSize: "0.8rem", color: "#059669", fontWeight: "600", marginTop: "0.25rem" }}>
+                        (Ưu đãi bù chênh lệch từ gói Pro: -49k)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      299.000 đ <small>/ 30 ngày</small>
+                    </>
+                  )}
                 </div>
                 <ul className="pricing-card-features">
                   <li><strong>399 lượt / tuần</strong> (làm mới mỗi tuần trong 30 ngày)</li>
@@ -268,9 +281,11 @@ export function AccountStateView({
               <button
                 type="button"
                 className="pricing-btn pricing-btn-ultra"
+                disabled={isUltra}
+                style={isUltra ? { opacity: 0.65, cursor: "default" } : undefined}
                 onClick={() => void handleStartUpgrade("ULTRA_MONTHLY")}
               >
-                Nâng cấp gói Ultra ★
+                {isUltra ? "Gói Ultra đang kích hoạt ★" : isPro ? "Nâng cấp lên Ultra (Bù 250k) ★" : "Nâng cấp gói Ultra ★"}
               </button>
             </article>
           </div>
